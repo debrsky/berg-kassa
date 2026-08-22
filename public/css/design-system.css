@@ -1,0 +1,69 @@
+:root {
+    color-scheme: light;
+    --color-bg: #f4f6f8;
+    --color-surface: #ffffff;
+    --color-surface-muted: #eef2f5;
+    --color-text: #18212b;
+    --color-text-muted: #637083;
+    --color-border: #d7dee7;
+    --color-primary: #2457d6;
+    --color-primary-hover: #1946b8;
+    --color-income: #137a4b;
+    --color-income-soft: #e7f6ee;
+    --color-expense: #b33232;
+    --color-expense-soft: #fcecec;
+    --color-protected: #75510b;
+    --color-protected-soft: #fff4d6;
+    --color-focus: #6f9cff;
+
+    --font-family: Inter, "Segoe UI", Arial, sans-serif;
+    --font-size-sm: 0.8125rem;
+    --font-size-base: 0.9375rem;
+    --font-size-lg: 1.125rem;
+    --font-weight-medium: 600;
+    --font-weight-bold: 700;
+
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+
+    --radius-sm: 0.375rem;
+    --radius-md: 0.625rem;
+    --shadow-sm: 0 1px 3px rgb(24 33 43 / 10%);
+    --control-height: 2.5rem;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    font-family: var(--font-family);
+    color: var(--color-text);
+    background: var(--color-bg);
+}
+
+body {
+    margin: 0;
+    font-size: var(--font-size-base);
+}
+
+button,
+input,
+select {
+    min-height: var(--control-height);
+    font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 1px;
+}
+
