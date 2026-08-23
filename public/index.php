@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/app.php';
 
+header('X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex');
+
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $isLoginPage = $path === '/login';
 
@@ -61,10 +63,11 @@ try {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
     <meta name="description" content="Просмотр приходных и расходных операций кассы">
     <title><?= $isLoginPage ? 'Вход — Касса' : 'Касса — операции' ?></title>
-    <link rel="stylesheet" href="/css/design-system.css">
-    <link rel="stylesheet" href="/css/app.css">
+    <link rel="stylesheet" href="/css/design-system.css?v=<?= filemtime(__DIR__ . '/css/design-system.css') ?>">
+    <link rel="stylesheet" href="/css/app.css?v=<?= filemtime(__DIR__ . '/css/app.css') ?>">
 </head>
 <body>
 <?php if ($isLoginPage): ?>
@@ -87,7 +90,7 @@ try {
         </form>
     </section>
 </main>
-<script src="/js/login.js" defer></script>
+<script src="/js/login.js?v=<?= filemtime(__DIR__ . '/js/login.js') ?>" defer></script>
 <?php else: ?>
 <main class="dashboard">
     <header class="dashboard__header">
@@ -145,7 +148,7 @@ try {
                 Защищённые
             </span>
         </label>
-        <button class="filter-bar__reset" type="button" id="reset">Сбросить</button>
+        <button class="filter-bar__reset" type="button" id="reset-filters">Сбросить</button>
     </form>
 
     <div class="operations-tabs" role="tablist" aria-label="Тип операции">
@@ -203,7 +206,7 @@ try {
     </header>
     <p class="note-popover__text" data-note-text></p>
 </aside>
-<script src="/js/app.js" defer></script>
+<script src="/js/app.js?v=<?= filemtime(__DIR__ . '/js/app.js') ?>" defer></script>
 <?php endif; ?>
 </body>
 </html>

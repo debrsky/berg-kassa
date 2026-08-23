@@ -1,0 +1,21 @@
+Options -Indexes
+DirectoryIndex index.php
+
+SetEnvIf X-Forwarded-Proto https SERVER_PORT=443
+SetEnvIf X-Forwarded-Proto https HTTPS=on
+
+<IfModule mod_headers.c>
+    Header always set Cache-Control "no-cache, must-revalidate"
+    Header always set Pragma "no-cache"
+    Header always set Expires "0"
+    Header always set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"
+    Header always set Strict-Transport-Security "max-age=31536000"
+</IfModule>
+
+RewriteEngine On
+RewriteCond %{HTTP:HTTPS} !=on [NC]
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]

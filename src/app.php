@@ -95,10 +95,14 @@ function startAppSession(): void
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
     session_name('berg_kassa_session');
+    $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || strtolower((string) ($_SERVER['HTTP_HTTPS'] ?? '')) === 'on'
+        || $forwardedProto === 'https';
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => '/',
-        'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+        'secure' => $secure,
         'httponly' => true,
         'samesite' => 'Strict',
     ]);

@@ -20,6 +20,12 @@ Remove-Item Env:NEW_USER_PASSWORD
 защищённым операциям: `1` — доступ разрешён, `0` — запрещён. Команда также
 обновляет существующего пользователя с тем же логином.
 
+Короткая команда для локальной базы с безопасным запросом пароля:
+
+```powershell
+.\bin\add-local-user.ps1 new_user vl 1
+```
+
 Приложение читает подключение к PostgreSQL из `.env`. Для повторного импорта
 данных из MSSQL:
 
@@ -37,3 +43,24 @@ python migrate_trading.py
 node --check public\js\app.js
 node --check public\js\login.js
 ```
+
+## Перенос на хостинг
+
+Заполните `HOSTING_PGSQL_*` и `FTP_KASSA_*` в локальном `.env`. Создайте дамп
+нужных схем и восстановите его в PostgreSQL хостинга:
+
+```powershell
+.\bin\backup-database.ps1 -Schemas auth,vl
+.\bin\restore-hosting-database.ps1
+```
+
+Ключ `-Replace` у второго скрипта полностью заменяет уже существующие объекты из
+дампа. Загрузка PHP-приложения не удаляет посторонние файлы, включая `cgi-bin`:
+
+```powershell
+.\bin\deploy-hosting.ps1
+```
+
+Скрипт намеренно не передаёт `.env` по незашифрованному FTP. Создайте `.env`
+уровнем выше `public_html` через SSH или защищённый файловый менеджер, используя
+PostgreSQL-параметры хостинга как значения `LOCAL_PGSQL_*`.

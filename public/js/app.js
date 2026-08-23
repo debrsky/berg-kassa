@@ -352,7 +352,7 @@ form.addEventListener('change', event => {
     }
     refresh();
 });
-document.querySelector('#reset').addEventListener('click', () => {
+document.querySelector('#reset-filters').addEventListener('click', () => {
     form.reset();
     const [from, to] = defaultDates();
     form.elements.from_date.value = from;
