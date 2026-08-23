@@ -148,6 +148,8 @@ CREATE INDEX IF NOT EXISTS actions_date_idx ON actions(action_date);
 CREATE INDEX IF NOT EXISTS actions_account_date_idx ON actions(account_id, action_date);
 CREATE INDEX IF NOT EXISTS actions_suboperation_date_idx
     ON actions(suboperation_id, action_date);
+CREATE INDEX IF NOT EXISTS actions_flow_date_id_idx
+    ON actions(is_debit, action_date DESC, id DESC);
 """
 
 
@@ -187,12 +189,12 @@ def pg_connection():
         port=int(required("LOCAL_PGSQL_PORT")),
         user=required("LOCAL_PGSQL_USER"),
         password=required("LOCAL_PGSQL_PASSWORD"),
-        dbname=required("LOCAL_DATABASE"),
+        dbname=required("LOCAL_PGSQL_DATABASE"),
     )
 
 
 def pg_schema() -> str:
-    return required("LOCAL_SCHEMA")
+    return required("LOCAL_PGSQL_SCHEMA")
 
 
 def select_schema(cursor) -> None:
@@ -335,7 +337,7 @@ def apply(data: dict[str, list[tuple]], placeholders: dict[str, list[int]]) -> N
             select_schema(cursor)
             cursor.execute(
                 "SELECT pg_advisory_xact_lock(hashtext(%s))",
-                (f"{required('LOCAL_DATABASE')}.{pg_schema()}.migration",),
+                (f"{required('LOCAL_PGSQL_DATABASE')}.{pg_schema()}.migration",),
             )
             cursor.execute(DDL)
             cursor.execute(

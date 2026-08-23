@@ -1,5 +1,7 @@
 const ROW_HEIGHT = 58;
 const BUFFER = 8;
+const PAGE_SIZE = 100;
+const MAX_CACHED_PAGES = 20;
 const money = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const date = new Intl.DateTimeFormat('ru-RU');
 
@@ -27,68 +29,93 @@ class VirtualList {
         this.count = panel.querySelector('[data-count]');
         this.viewport.addEventListener('scroll', () => this.onScroll());
         new ResizeObserver(() => this.render()).observe(this.viewport);
-        this.items = [];
-        this.cursor = null;
-        this.loading = false;
-        this.finished = true;
+        this.pages = new Map();
+        this.pending = new Map();
+        this.total = null;
         this.canvas.replaceChildren(this.message('Выберите доступную схему'));
     }
 
     reset() {
-        this.items = [];
-        this.cursor = null;
-        this.loading = false;
-        this.finished = false;
+        clearTimeout(this.scrollTimer);
+        for (const pending of this.pending.values()) pending.controller.abort();
+        this.pages.clear();
+        this.pending.clear();
+        this.total = null;
         this.version = requestVersion;
         this.viewport.scrollTop = 0;
+        this.canvas.style.height = '';
         this.canvas.replaceChildren(this.message('Загрузка операций…'));
         this.count.textContent = '0';
-        this.load();
+        this.loadPage(0);
     }
 
-    async load() {
-        if (this.loading || this.finished) return;
-        this.loading = true;
-        try {
+    loadPage(page) {
+        if (this.pages.has(page) || this.pending.has(page)) return;
+        const version = this.version;
+        const controller = new AbortController();
+        let request;
+        request = (async () => {
             const params = filterParams();
             params.set('flow', this.flow);
-            if (this.cursor) params.set('cursor', this.cursor);
-            const response = await fetchJson(`/api/actions?${params}`);
-            if (this.version !== requestVersion) return;
-            this.items.push(...response.items);
-            this.cursor = response.next_cursor;
-            this.finished = !this.cursor;
-            this.count.textContent = this.items.length.toLocaleString('ru-RU') + (this.finished ? '' : '+');
+            params.set('offset', page * PAGE_SIZE);
+            params.set('limit', PAGE_SIZE);
+            if (this.total === null) params.set('include_total', '1');
+            const response = await fetchJson(`/api/actions?${params}`, { signal: controller.signal });
+            if (version !== requestVersion) return;
+            if (response.total !== null) {
+                this.total = Number(response.total);
+                this.count.textContent = this.total.toLocaleString('ru-RU');
+                this.canvas.style.height = `${this.total * ROW_HEIGHT}px`;
+            }
+            this.pages.set(page, response.items);
+            while (this.pages.size > MAX_CACHED_PAGES) this.pages.delete(this.pages.keys().next().value);
             this.render();
-        } catch (error) {
+        })().catch(error => {
+            if (error.name === 'AbortError') return;
+            if (version !== requestVersion) return;
             this.canvas.replaceChildren(this.message(error.message, true));
-        } finally {
-            this.loading = false;
-        }
+        }).finally(() => {
+            if (this.pending.get(page)?.request === request) this.pending.delete(page);
+        });
+        this.pending.set(page, { request, controller });
     }
 
     onScroll() {
         if (notePopover.matches(':popover-open')) notePopover.hidePopover();
-        this.render();
-        if (this.viewport.scrollTop + this.viewport.clientHeight >= this.canvas.offsetHeight - ROW_HEIGHT * 8) {
-            this.load();
-        }
+        clearTimeout(this.scrollTimer);
+        this.scrollTimer = setTimeout(() => this.render(), 120);
     }
 
     render() {
-        if (!this.items.length) {
-            if (this.finished) this.canvas.replaceChildren(this.message('Операций не найдено'));
+        if (this.total === null) {
+            this.loadPage(0);
+            return;
+        }
+        if (this.total === 0) {
+            this.canvas.replaceChildren(this.message('Операций не найдено'));
             return;
         }
         const start = Math.max(0, Math.floor(this.viewport.scrollTop / ROW_HEIGHT) - BUFFER);
         const visible = Math.ceil(this.viewport.clientHeight / ROW_HEIGHT) + BUFFER * 2;
-        const end = Math.min(this.items.length, start + visible);
-        this.canvas.style.height = `${this.items.length * ROW_HEIGHT + (this.finished ? 0 : ROW_HEIGHT * 4)}px`;
+        const end = Math.min(this.total, start + visible);
+        const firstPage = Math.floor(start / PAGE_SIZE);
+        const lastPage = Math.floor((end - 1) / PAGE_SIZE);
+        for (const [page, pending] of this.pending) {
+            if (page < firstPage || page > lastPage) pending.controller.abort();
+        }
+        for (let page = firstPage; page <= lastPage; page++) this.loadPage(page);
         const fragment = document.createDocumentFragment();
         for (let index = start; index < end; index++) {
-            fragment.append(this.row(this.items[index], index));
+            const page = Math.floor(index / PAGE_SIZE);
+            const items = this.pages.get(page);
+            if (items) {
+                this.pages.delete(page);
+                this.pages.set(page, items);
+                const item = items[index % PAGE_SIZE];
+                if (item) fragment.append(this.row(item, index));
+            }
         }
-        if (!this.finished && end === this.items.length) fragment.append(this.message('Загрузка…', false, end));
+        if (!fragment.childNodes.length) fragment.append(this.message('Загрузка…', false, start));
         this.canvas.replaceChildren(fragment);
         this.enhanceNotes();
     }
@@ -147,6 +174,33 @@ class VirtualList {
 }
 
 const lists = [...document.querySelectorAll('.operation-panel')].map(panel => new VirtualList(panel));
+
+function selectOperationsTab(flow) {
+    sessionStorage.setItem('operations-tab', flow);
+    for (const tab of document.querySelectorAll('[data-flow-tab]')) {
+        const active = tab.dataset.flowTab === flow;
+        tab.classList.toggle('operations-tabs__tab--active', active);
+        tab.setAttribute('aria-selected', String(active));
+        tab.tabIndex = active ? 0 : -1;
+    }
+    for (const list of lists) {
+        list.panel.classList.toggle('operation-panel--active', list.flow === flow);
+        if (list.flow === flow) list.render();
+    }
+}
+
+const tabs = [...document.querySelectorAll('[data-flow-tab]')];
+for (const tab of tabs) {
+    tab.addEventListener('click', () => selectOperationsTab(tab.dataset.flowTab));
+    tab.addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+        event.preventDefault();
+        const next = tabs[(tabs.indexOf(tab) + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+        selectOperationsTab(next.dataset.flowTab);
+        next.focus();
+    });
+}
+selectOperationsTab(sessionStorage.getItem('operations-tab') === 'expense' ? 'expense' : 'income');
 
 function defaultDates() {
     const end = new Date();

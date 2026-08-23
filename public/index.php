@@ -148,8 +148,15 @@ try {
         <button class="filter-bar__reset" type="button" id="reset">Сбросить</button>
     </form>
 
+    <div class="operations-tabs" role="tablist" aria-label="Тип операции">
+        <button class="operations-tabs__tab operations-tabs__tab--active" id="income-tab" type="button" role="tab"
+                aria-selected="true" aria-controls="income-panel" data-flow-tab="income">Приход</button>
+        <button class="operations-tabs__tab" id="expense-tab" type="button" role="tab" aria-selected="false"
+                aria-controls="expense-panel" data-flow-tab="expense" tabindex="-1">Расход</button>
+    </div>
     <section class="operations-board" aria-label="Операции">
-        <section class="operation-panel" data-flow="income">
+        <section class="operation-panel operation-panel--active" id="income-panel" role="tabpanel"
+                 aria-labelledby="income-tab" data-flow="income">
             <header class="operation-panel__header operation-panel__header--income">
                 <span>Приход</span><span class="operation-panel__count" data-count>0</span>
             </header>
@@ -160,7 +167,8 @@ try {
                 <div class="operation-panel__canvas" data-canvas></div>
             </div>
         </section>
-        <section class="operation-panel" data-flow="expense">
+        <section class="operation-panel" id="expense-panel" role="tabpanel"
+                 aria-labelledby="expense-tab" data-flow="expense">
             <header class="operation-panel__header operation-panel__header--expense">
                 <span>Расход</span><span class="operation-panel__count" data-count>0</span>
             </header>

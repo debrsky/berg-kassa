@@ -45,7 +45,7 @@ function db(): PDO
         'pgsql:host=%s;port=%d;dbname=%s',
         env('LOCAL_PGSQL_HOST'),
         (int) env('LOCAL_PGSQL_PORT'),
-        env('LOCAL_DATABASE'),
+        env('LOCAL_PGSQL_DATABASE'),
     );
     $pdo = new PDO($dsn, env('LOCAL_PGSQL_USER'), env('LOCAL_PGSQL_PASSWORD'), [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -335,21 +335,6 @@ function joins(): string
     SQL;
 }
 
-function encodeCursor(array $row): string
-{
-    return rtrim(strtr(base64_encode(json_encode([$row['sort_date'], (int) $row['id']])), '+/', '-_'), '=');
-}
-
-function decodeCursor(string $cursor): array
-{
-    $decoded = base64_decode(strtr($cursor, '-_', '+/'), true);
-    $value = $decoded === false ? null : json_decode($decoded, true);
-    if (!is_array($value) || count($value) !== 2 || !is_string($value[0]) || !is_int($value[1])) {
-        throw new InvalidArgumentException('Invalid cursor');
-    }
-    return $value;
-}
-
 function lookups(): never
 {
     $pdo = db();
@@ -375,33 +360,38 @@ function actions(array $user): never
     if (!in_array($flow, ['income', 'expense'], true)) {
         throw new InvalidArgumentException('flow must be income or expense');
     }
+    $offset = (string) ($_GET['offset'] ?? '0');
+    $limit = (string) ($_GET['limit'] ?? '100');
+    if (!ctype_digit($offset) || !ctype_digit($limit) || (int) $limit < 1 || (int) $limit > 200) {
+        throw new InvalidArgumentException('Invalid offset or limit');
+    }
+    $offset = (int) $offset;
+    $limit = (int) $limit;
 
     $params = [];
     $where = filterSql($filters, $params, true);
-    if (isset($_GET['cursor']) && $_GET['cursor'] !== '') {
-        [$params['cursor_date'], $params['cursor_id']] = decodeCursor((string) $_GET['cursor']);
-        $where .= " AND (COALESCE(a.action_date, DATE '0001-01-01'), a.id) < (:cursor_date::timestamp, :cursor_id)";
+    $base = ' FROM actions a ' . joins()
+        . ' WHERE a.is_debit = ' . ($flow === 'income' ? 'TRUE' : 'FALSE') . $where;
+    $total = null;
+    if (($_GET['include_total'] ?? '0') === '1') {
+        $statement = db()->prepare('SELECT COUNT(*)' . $base);
+        $statement->execute($params);
+        $total = (int) $statement->fetchColumn();
     }
 
-    $sql = 'SELECT a.id, a.suboperation_id, a.action_date, COALESCE(a.action_date, DATE \'0001-01-01\') AS sort_date, '
+    $page = 'SELECT a.id' . $base
+        . ' ORDER BY a.action_date DESC, a.id DESC '
+        . "LIMIT {$limit} OFFSET {$offset}";
+    $sql = 'WITH page AS (' . $page . ') SELECT a.id, a.suboperation_id, a.action_date, '
         . 'a.amount, a.exchange_rate, a.memo, a.is_black, ac.name AS account, c.name AS currency, '
         . 'd.name AS direction, at.name AS action_type, s1.name AS suboperation_l1, '
         . 's2.name AS suboperation_l2, s2.is_placeholder AS suboperation_placeholder '
-        . 'FROM actions a ' . joins()
-        . ' WHERE a.is_debit = ' . ($flow === 'income' ? 'TRUE' : 'FALSE') . $where
-        . ' ORDER BY COALESCE(a.action_date, DATE \'0001-01-01\') DESC, a.id DESC LIMIT 101';
+        . 'FROM page p JOIN actions a ON a.id = p.id ' . joins()
+        . ' ORDER BY a.action_date DESC, a.id DESC';
     $statement = db()->prepare($sql);
     $statement->execute($params);
     $items = $statement->fetchAll();
-    $hasMore = count($items) > 100;
-    if ($hasMore) {
-        array_pop($items);
-    }
-    $nextCursor = $hasMore ? encodeCursor($items[array_key_last($items)]) : null;
-    foreach ($items as &$item) {
-        unset($item['sort_date']);
-    }
-    jsonResponse(['items' => $items, 'next_cursor' => $nextCursor]);
+    jsonResponse(['items' => $items, 'total' => $total]);
 }
 
 function summary(array $user): never
