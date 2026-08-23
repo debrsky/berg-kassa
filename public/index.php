@@ -163,8 +163,10 @@ try {
             <header class="operation-panel__header operation-panel__header--income">
                 <span>Приход</span><span class="operation-panel__count" data-count>0</span>
             </header>
-            <div class="operation-panel__columns" aria-hidden="true">
-                <span>Дата</span><span>Счёт</span><span>Операция</span><span>Подоперация</span><span>Сумма</span>
+            <div class="operation-panel__columns-scroll" data-columns-scroll>
+                <div class="operation-panel__columns" aria-hidden="true">
+                    <span>Дата</span><span>Счёт</span><span>Операция</span><span>Подоперация</span><span>Сумма</span>
+                </div>
             </div>
             <div class="operation-panel__body" tabindex="0" data-list aria-label="Приходные операции">
                 <div class="operation-panel__canvas" data-canvas></div>
@@ -175,8 +177,10 @@ try {
             <header class="operation-panel__header operation-panel__header--expense">
                 <span>Расход</span><span class="operation-panel__count" data-count>0</span>
             </header>
-            <div class="operation-panel__columns" aria-hidden="true">
-                <span>Дата</span><span>Счёт</span><span>Операция</span><span>Подоперация</span><span>Сумма</span>
+            <div class="operation-panel__columns-scroll" data-columns-scroll>
+                <div class="operation-panel__columns" aria-hidden="true">
+                    <span>Дата</span><span>Счёт</span><span>Операция</span><span>Подоперация</span><span>Сумма</span>
+                </div>
             </div>
             <div class="operation-panel__body" tabindex="0" data-list aria-label="Расходные операции">
                 <div class="operation-panel__canvas" data-canvas></div>

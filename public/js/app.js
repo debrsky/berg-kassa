@@ -26,6 +26,7 @@ class VirtualList {
         this.flow = panel.dataset.flow;
         this.viewport = panel.querySelector('[data-list]');
         this.canvas = panel.querySelector('[data-canvas]');
+        this.columnsViewport = panel.querySelector('[data-columns-scroll]');
         this.count = panel.querySelector('[data-count]');
         this.viewport.addEventListener('scroll', () => this.onScroll());
         new ResizeObserver(() => this.render()).observe(this.viewport);
@@ -82,8 +83,14 @@ class VirtualList {
 
     onScroll() {
         if (notePopover.matches(':popover-open')) notePopover.hidePopover();
+        this.syncColumns();
         clearTimeout(this.scrollTimer);
         this.scrollTimer = setTimeout(() => this.render(), 120);
+    }
+
+    syncColumns() {
+        this.columnsViewport.style.marginRight = `${this.viewport.offsetWidth - this.viewport.clientWidth}px`;
+        this.columnsViewport.scrollLeft = this.viewport.scrollLeft;
     }
 
     render() {
@@ -117,6 +124,7 @@ class VirtualList {
         }
         if (!fragment.childNodes.length) fragment.append(this.message('Загрузка…', false, start));
         this.canvas.replaceChildren(fragment);
+        this.syncColumns();
         this.enhanceNotes();
     }
 
