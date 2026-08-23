@@ -8,6 +8,7 @@
     --color-border: #d7dee7;
     --color-primary: #2457d6;
     --color-primary-hover: #1946b8;
+    --color-primary-soft: #e8efff;
     --color-income: #137a4b;
     --color-income-soft: #e7f6ee;
     --color-expense: #b33232;
@@ -15,6 +16,7 @@
     --color-protected: #75510b;
     --color-protected-soft: #fff4d6;
     --color-focus: #6f9cff;
+    --color-heading: #0f1d2c;
 
     --font-family: Inter, "Segoe UI", Arial, sans-serif;
     --font-size-sm: 0.8125rem;
@@ -33,6 +35,7 @@
     --radius-sm: 0.375rem;
     --radius-md: 0.625rem;
     --shadow-sm: 0 1px 3px rgb(24 33 43 / 10%);
+    --shadow-md: 0 12px 32px rgb(24 33 43 / 9%);
     --control-height: 2.5rem;
 }
 
@@ -53,6 +56,10 @@ body {
     font-size: var(--font-size-base);
 }
 
+[hidden] {
+    display: none;
+}
+
 button,
 input,
 select {
@@ -66,4 +73,3 @@ select:focus-visible {
     outline: 3px solid var(--color-focus);
     outline-offset: 1px;
 }
-
