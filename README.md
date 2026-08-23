@@ -1,6 +1,7 @@
 # Berg Kassa WebUI
 
-Read-only WebUI для просмотра операций из PostgreSQL `berg_kassa`, схема `vl`.
+Read-only WebUI для просмотра операций из PostgreSQL `berg_kassa`.
+Пользователь выбирает рабочую схему из списка, заданного в его профиле.
 
 ## Запуск
 
