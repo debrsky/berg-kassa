@@ -65,6 +65,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
     <meta name="description" content="Просмотр приходных и расходных операций кассы">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <title><?= $isLoginPage ? 'Вход — Касса' : 'Касса — операции' ?></title>
     <link rel="stylesheet" href="/css/design-system.css?v=<?= filemtime(__DIR__ . '/css/design-system.css') ?>">
     <link rel="stylesheet" href="/css/app.css?v=<?= filemtime(__DIR__ . '/css/app.css') ?>">
