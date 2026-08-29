@@ -39,6 +39,54 @@
     --control-height: 2.5rem;
 }
 
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --color-bg: #10151c;
+    --color-surface: #18212b;
+    --color-surface-muted: #222e3b;
+    --color-text: #e7edf4;
+    --color-text-muted: #a6b3c2;
+    --color-border: #354354;
+    --color-primary: #7ca3ff;
+    --color-primary-hover: #9ab8ff;
+    --color-primary-soft: #263b68;
+    --color-income: #5fd39a;
+    --color-income-soft: #17392b;
+    --color-expense: #ff8b8b;
+    --color-expense-soft: #452525;
+    --color-protected: #ffd277;
+    --color-protected-soft: #453719;
+    --color-focus: #91afff;
+    --color-heading: #f4f7fb;
+    --shadow-sm: 0 1px 3px rgb(0 0 0 / 35%);
+    --shadow-md: 0 12px 32px rgb(0 0 0 / 30%);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="system"] {
+        color-scheme: dark;
+        --color-bg: #10151c;
+        --color-surface: #18212b;
+        --color-surface-muted: #222e3b;
+        --color-text: #e7edf4;
+        --color-text-muted: #a6b3c2;
+        --color-border: #354354;
+        --color-primary: #7ca3ff;
+        --color-primary-hover: #9ab8ff;
+        --color-primary-soft: #263b68;
+        --color-income: #5fd39a;
+        --color-income-soft: #17392b;
+        --color-expense: #ff8b8b;
+        --color-expense-soft: #452525;
+        --color-protected: #ffd277;
+        --color-protected-soft: #453719;
+        --color-focus: #91afff;
+        --color-heading: #f4f7fb;
+        --shadow-sm: 0 1px 3px rgb(0 0 0 / 35%);
+        --shadow-md: 0 12px 32px rgb(0 0 0 / 30%);
+    }
+}
+
 *,
 *::before,
 *::after {
@@ -62,14 +110,16 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
     min-height: var(--control-height);
     font: inherit;
 }
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
     outline: 3px solid var(--color-focus);
     outline-offset: 1px;
 }

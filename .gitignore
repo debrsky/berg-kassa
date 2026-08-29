@@ -4,3 +4,6 @@ __pycache__/
 php-8.5.zip
 .tools/php/
 /backups/
+node_modules/
+test-results/
+playwright-report/

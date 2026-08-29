@@ -169,6 +169,13 @@ function csrfToken(): string
     return $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 }
 
+function requireCsrf(): void
+{
+    if (!hash_equals(csrfToken(), (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
+        jsonResponse(['error' => 'Invalid CSRF token'], 403);
+    }
+}
+
 function selectDataSchema(array $user): never
 {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -344,7 +351,15 @@ function lookups(): never
     $pdo = db();
     $queries = [
         'accounts' => 'SELECT id, name, currency_id FROM accounts ORDER BY name NULLS LAST, id',
-        'currencies' => 'SELECT id, name FROM currencies ORDER BY name NULLS LAST, id',
+        'currencies' => <<<'SQL'
+            SELECT c.id, c.name, COALESCE(
+                (SELECT cr.rate FROM currency_rates cr
+                 WHERE cr.currency_id = c.id AND cr.rate IS NOT NULL
+                 ORDER BY cr.rate_date DESC NULLS LAST, cr.id DESC LIMIT 1),
+                CASE WHEN c.name = 'р.' THEN 1 END
+            ) AS default_rate
+            FROM currencies c ORDER BY c.name NULLS LAST, c.id
+        SQL,
         'directions' => 'SELECT id, name, is_placeholder FROM directions ORDER BY name NULLS LAST, id',
         'action_types' => 'SELECT id, direction_id, name, is_placeholder FROM action_types ORDER BY name NULLS LAST, id',
         'suboperations_l1' => 'SELECT id, action_type_id, name, is_placeholder FROM suboperations_l1 ORDER BY name NULLS LAST, id',
@@ -355,6 +370,252 @@ function lookups(): never
         $result[$name] = $pdo->query($sql)->fetchAll();
     }
     jsonResponse($result);
+}
+
+function referenceConfig(string $type): array
+{
+    $configs = [
+        'accounts' => [
+            'table' => 'accounts', 'fields' => ['name' => 'text', 'currency_id' => 'id', 'memo' => 'nullable_text'],
+            'relations' => ['currency_id' => 'currencies'], 'order' => 'name NULLS LAST, id',
+            'dependencies' => [['actions', 'account_id', 'операциях']],
+        ],
+        'currencies' => [
+            'table' => 'currencies', 'fields' => ['name' => 'text', 'memo' => 'nullable_text'],
+            'order' => 'name NULLS LAST, id',
+            'dependencies' => [
+                ['actions', 'currency_id', 'операциях'], ['accounts', 'currency_id', 'счетах'],
+                ['currency_rates', 'currency_id', 'курсах'],
+            ],
+        ],
+        'currency_rates' => [
+            'table' => 'currency_rates',
+            'fields' => ['currency_id' => 'id', 'rate_date' => 'datetime', 'rate' => 'decimal'],
+            'relations' => ['currency_id' => 'currencies'], 'order' => 'rate_date DESC NULLS LAST, id DESC',
+            'dependencies' => [],
+        ],
+        'directions' => [
+            'table' => 'directions', 'fields' => ['name' => 'text', 'memo' => 'nullable_text'],
+            'order' => 'name NULLS LAST, id', 'placeholder' => true,
+            'dependencies' => [['action_types', 'direction_id', 'операциях справочника']],
+        ],
+        'action_types' => [
+            'table' => 'action_types',
+            'fields' => ['direction_id' => 'id', 'name' => 'text', 'memo' => 'nullable_text'],
+            'relations' => ['direction_id' => 'directions'], 'order' => 'name NULLS LAST, id', 'placeholder' => true,
+            'dependencies' => [['suboperations_l1', 'action_type_id', 'подоперациях 1']],
+        ],
+        'suboperations_l1' => [
+            'table' => 'suboperations_l1',
+            'fields' => ['action_type_id' => 'id', 'name' => 'text', 'memo' => 'nullable_text'],
+            'relations' => ['action_type_id' => 'action_types'], 'order' => 'name NULLS LAST, id', 'placeholder' => true,
+            'dependencies' => [['suboperations_l2', 'suboperation_l1_id', 'подоперациях 2']],
+        ],
+        'suboperations_l2' => [
+            'table' => 'suboperations_l2',
+            'fields' => ['suboperation_l1_id' => 'id', 'name' => 'text', 'memo' => 'nullable_text'],
+            'relations' => ['suboperation_l1_id' => 'suboperations_l1'], 'order' => 'name NULLS LAST, id', 'placeholder' => true,
+            'dependencies' => [['actions', 'suboperation_id', 'операциях']],
+        ],
+    ];
+    if (!isset($configs[$type])) {
+        throw new InvalidArgumentException('Unknown reference type');
+    }
+    return $configs[$type];
+}
+
+function references(string $type): never
+{
+    $config = referenceConfig($type);
+    jsonResponse(db()->query("SELECT * FROM {$config['table']} ORDER BY {$config['order']}")->fetchAll());
+}
+
+function referenceBody(array $config): array
+{
+    $body = json_decode(file_get_contents('php://input'), true, flags: JSON_THROW_ON_ERROR);
+    if (!is_array($body)) {
+        throw new InvalidArgumentException('Invalid request body');
+    }
+    $values = [];
+    foreach ($config['fields'] as $name => $type) {
+        $value = $body[$name] ?? null;
+        if ($type === 'text' || $type === 'nullable_text') {
+            $value = trim((string) $value);
+            if ($type === 'text' && $value === '') {
+                throw new InvalidArgumentException("Поле {$name} обязательно");
+            }
+            $values[$name] = $value === '' ? null : $value;
+        } elseif ($type === 'id') {
+            if (!ctype_digit((string) $value) || (int) $value < 1) {
+                throw new InvalidArgumentException("Invalid field: {$name}");
+            }
+            $values[$name] = (int) $value;
+        } elseif ($type === 'decimal') {
+            if (!is_numeric($value) || (float) $value <= 0) {
+                throw new InvalidArgumentException("Invalid field: {$name}");
+            }
+            $values[$name] = number_format((float) $value, 4, '.', '');
+        } elseif ($type === 'datetime') {
+            $date = DateTimeImmutable::createFromFormat('!Y-m-d\TH:i', (string) $value);
+            if (!$date || $date->format('Y-m-d\TH:i') !== $value) {
+                throw new InvalidArgumentException("Invalid field: {$name}");
+            }
+            $values[$name] = $date->format('Y-m-d H:i:s');
+        }
+    }
+    foreach ($config['relations'] ?? [] as $field => $table) {
+        $statement = db()->prepare("SELECT 1 FROM {$table} WHERE id = :id");
+        $statement->execute(['id' => $values[$field]]);
+        if (!$statement->fetchColumn()) {
+            throw new InvalidArgumentException("Unknown field value: {$field}");
+        }
+    }
+    return $values;
+}
+
+function writeReference(string $type, ?int $id = null): never
+{
+    requireCsrf();
+    $config = referenceConfig($type);
+    $values = referenceBody($config);
+    $columns = array_keys($values);
+    if ($id === null) {
+        $sql = "INSERT INTO {$config['table']} (" . implode(', ', $columns) . ') VALUES ('
+            . implode(', ', array_map(fn (string $column) => ":{$column}", $columns)) . ') RETURNING id';
+    } else {
+        $sets = array_map(fn (string $column) => "{$column} = :{$column}", $columns);
+        if (!empty($config['placeholder'])) {
+            $sets[] = 'is_placeholder = false';
+        }
+        $sql = "UPDATE {$config['table']} SET " . implode(', ', $sets) . ' WHERE id = :id RETURNING id';
+        $values['id'] = $id;
+    }
+    $statement = db()->prepare($sql);
+    $statement->execute($values);
+    $savedId = $statement->fetchColumn();
+    if ($savedId === false) {
+        jsonResponse(['error' => 'Запись не найдена'], 404);
+    }
+    jsonResponse(['id' => (int) $savedId], $id === null ? 201 : 200);
+}
+
+function deleteReference(string $type, int $id): never
+{
+    requireCsrf();
+    $config = referenceConfig($type);
+    $uses = [];
+    foreach ($config['dependencies'] as [$table, $column, $label]) {
+        $statement = db()->prepare("SELECT COUNT(*) FROM {$table} WHERE {$column} = :id");
+        $statement->execute(['id' => $id]);
+        $count = (int) $statement->fetchColumn();
+        if ($count) {
+            $uses[] = "{$label}: {$count}";
+        }
+    }
+    if ($uses) {
+        jsonResponse(['error' => 'Нельзя удалить запись: она используется (' . implode(', ', $uses) . ')'], 409);
+    }
+    $statement = db()->prepare("DELETE FROM {$config['table']} WHERE id = :id");
+    $statement->execute(['id' => $id]);
+    if ($statement->rowCount() === 0) {
+        jsonResponse(['error' => 'Запись не найдена'], 404);
+    }
+    jsonResponse(['ok' => true]);
+}
+
+function actionBody(): array
+{
+    $body = json_decode(file_get_contents('php://input'), true, flags: JSON_THROW_ON_ERROR);
+    if (!is_array($body)) {
+        throw new InvalidArgumentException('Invalid request body');
+    }
+    foreach (['account_id', 'currency_id', 'suboperation_id'] as $name) {
+        if (!isset($body[$name]) || !ctype_digit((string) $body[$name]) || (int) $body[$name] < 1) {
+            throw new InvalidArgumentException("Invalid field: {$name}");
+        }
+        $body[$name] = (int) $body[$name];
+    }
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d\TH:i', (string) ($body['action_date'] ?? ''));
+    if (!$date || $date->format('Y-m-d\TH:i') !== ($body['action_date'] ?? '')) {
+        throw new InvalidArgumentException('Invalid field: action_date');
+    }
+    if (!isset($body['amount']) || !is_numeric($body['amount']) || (float) $body['amount'] <= 0) {
+        throw new InvalidArgumentException('Invalid field: amount');
+    }
+    $exchangeRate = $body['exchange_rate'] ?? null;
+    if ($exchangeRate !== null && $exchangeRate !== '' && (!is_numeric($exchangeRate) || (float) $exchangeRate <= 0)) {
+        throw new InvalidArgumentException('Invalid field: exchange_rate');
+    }
+    $isDebit = filter_var($body['is_debit'] ?? null, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+    $isBlack = filter_var($body['is_black'] ?? false, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+    if ($isDebit === null || $isBlack === null) {
+        throw new InvalidArgumentException('Invalid boolean field');
+    }
+    return [
+        'account_id' => $body['account_id'],
+        'currency_id' => $body['currency_id'],
+        'suboperation_id' => $body['suboperation_id'],
+        'action_date' => $date->format('Y-m-d H:i:s'),
+        'amount' => number_format((float) $body['amount'], 2, '.', ''),
+        'exchange_rate' => $exchangeRate === null || $exchangeRate === '' ? null : number_format((float) $exchangeRate, 4, '.', ''),
+        'is_debit' => $isDebit,
+        'memo' => trim((string) ($body['memo'] ?? '')) ?: null,
+        'is_black' => $isBlack,
+    ];
+}
+
+function writeAction(array $user, ?int $id = null): never
+{
+    requireCsrf();
+    $values = actionBody();
+    if ($values['is_black'] && !$user['can_view_protected']) {
+        jsonResponse(['error' => 'Protected operation access denied'], 403);
+    }
+    $pdo = db();
+    foreach (['accounts' => 'account_id', 'currencies' => 'currency_id', 'suboperations_l2' => 'suboperation_id'] as $table => $field) {
+        $statement = $pdo->prepare("SELECT 1 FROM {$table} WHERE id = :id");
+        $statement->execute(['id' => $values[$field]]);
+        if (!$statement->fetchColumn()) {
+            throw new InvalidArgumentException("Unknown field value: {$field}");
+        }
+    }
+    $values['is_debit'] = $values['is_debit'] ? 'true' : 'false';
+    $values['is_black'] = $values['is_black'] ? 'true' : 'false';
+    if ($id === null) {
+        $sql = 'INSERT INTO actions (account_id, currency_id, suboperation_id, action_date, amount, '
+            . 'exchange_rate, is_debit, memo, is_black) VALUES (:account_id, :currency_id, :suboperation_id, '
+            . ':action_date, :amount, :exchange_rate, :is_debit, :memo, :is_black) RETURNING id';
+    } else {
+        $access = $pdo->prepare('SELECT is_black FROM actions WHERE id = :id');
+        $access->execute(['id' => $id]);
+        $action = $access->fetch();
+        if (!$action) {
+            jsonResponse(['error' => 'Operation not found'], 404);
+        }
+        if ((bool) $action['is_black'] && !$user['can_view_protected']) {
+            jsonResponse(['error' => 'Protected operation access denied'], 403);
+        }
+        $sql = 'UPDATE actions SET account_id = :account_id, currency_id = :currency_id, '
+            . 'suboperation_id = :suboperation_id, action_date = :action_date, amount = :amount, '
+            . 'exchange_rate = :exchange_rate, is_debit = :is_debit, memo = :memo, is_black = :is_black '
+            . 'WHERE id = :id RETURNING id';
+        $values['id'] = $id;
+    }
+    $statement = $pdo->prepare($sql);
+    $statement->execute($values);
+    jsonResponse(['id' => (int) $statement->fetchColumn()], $id === null ? 201 : 200);
+}
+
+function deleteAction(array $user, int $id): never
+{
+    requireCsrf();
+    $statement = db()->prepare('DELETE FROM actions WHERE id = :id'
+        . ($user['can_view_protected'] ? '' : ' AND is_black = false'));
+    $statement->execute(['id' => $id]);
+    if ($statement->rowCount() === 0) {
+        jsonResponse(['error' => 'Operation not found or access denied'], 404);
+    }
+    jsonResponse(['ok' => true]);
 }
 
 function actions(array $user): never
@@ -386,8 +647,9 @@ function actions(array $user): never
     $page = 'SELECT a.id' . $base
         . ' ORDER BY a.action_date DESC, a.id DESC '
         . "LIMIT {$limit} OFFSET {$offset}";
-    $sql = 'WITH page AS (' . $page . ') SELECT a.id, a.suboperation_id, a.action_date, '
-        . 'a.amount, a.exchange_rate, a.memo, a.is_black, ac.name AS account, c.name AS currency, '
+    $sql = 'WITH page AS (' . $page . ') SELECT a.id, a.account_id, a.currency_id, a.suboperation_id, '
+        . 'a.action_date, a.amount, a.exchange_rate, a.is_debit, a.memo, a.is_black, '
+        . 'ac.name AS account, c.name AS currency, '
         . 'd.name AS direction, at.name AS action_type, s1.name AS suboperation_l1, '
         . 's2.name AS suboperation_l2, s2.is_placeholder AS suboperation_placeholder '
         . 'FROM page p JOIN actions a ON a.id = p.id ' . joins()

@@ -1,6 +1,6 @@
 # Berg Kassa WebUI
 
-Read-only WebUI для просмотра операций из PostgreSQL `berg_kassa`.
+WebUI для просмотра и ведения операций в PostgreSQL `berg_kassa`.
 Пользователь выбирает рабочую схему из списка, заданного в его профиле.
 
 ## Запуск
@@ -43,6 +43,23 @@ python migrate_trading.py
 .\.tools\php\php.exe -l public\index.php
 node --check public\js\app.js
 node --check public\js\login.js
+```
+
+Полный комплект включает статические, unit-, SQL/schema-, API- и UI-тесты.
+CRUD-сценарии создают только временные записи и удаляют их после проверки:
+
+```powershell
+npm install
+npx playwright install chromium
+npm test
+npx playwright show-report
+```
+
+Учётные данные E2E автоматически читаются из `.env`. Отдельный read-only
+нагрузочный прогон (100 сценариев, 8 параллельных работников):
+
+```powershell
+npm run test:load
 ```
 
 ## Перенос на хостинг

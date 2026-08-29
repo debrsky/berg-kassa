@@ -8,6 +8,7 @@ header('X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex');
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $isLoginPage = $path === '/login';
+$isReferencesPage = $path === '/references';
 
 try {
     if ($path === '/api/login') {
@@ -18,7 +19,7 @@ try {
             header('Location: /');
             exit;
         }
-    } elseif ($path === '/') {
+    } elseif ($path === '/' || $isReferencesPage) {
         if (!currentUser()) {
             header('Location: /login');
             exit;
@@ -35,6 +36,30 @@ try {
             logout();
         }
         useDataSchema($user['data_schema']);
+        if ($path === '/api/actions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+            writeAction($user);
+        }
+        if (preg_match('#^/api/actions/([1-9][0-9]*)$#', $path, $match)) {
+            match ($_SERVER['REQUEST_METHOD']) {
+                'PUT' => writeAction($user, (int) $match[1]),
+                'DELETE' => deleteAction($user, (int) $match[1]),
+                default => jsonResponse(['error' => 'Method not allowed'], 405),
+            };
+        }
+        if (preg_match('#^/api/references/([a-z0-9_]+)$#', $path, $match)) {
+            match ($_SERVER['REQUEST_METHOD']) {
+                'GET' => references($match[1]),
+                'POST' => writeReference($match[1]),
+                default => jsonResponse(['error' => 'Method not allowed'], 405),
+            };
+        }
+        if (preg_match('#^/api/references/([a-z0-9_]+)/([1-9][0-9]*)$#', $path, $match)) {
+            match ($_SERVER['REQUEST_METHOD']) {
+                'PUT' => writeReference($match[1], (int) $match[2]),
+                'DELETE' => deleteReference($match[1], (int) $match[2]),
+                default => jsonResponse(['error' => 'Method not allowed'], 405),
+            };
+        }
         match ($path) {
             '/api/lookups' => lookups(),
             '/api/actions' => actions($user),
@@ -44,7 +69,7 @@ try {
     } else {
         jsonResponse(['error' => 'Not found'], 404);
     }
-} catch (InvalidArgumentException $error) {
+} catch (InvalidArgumentException|JsonException $error) {
     jsonResponse(['error' => $error->getMessage()], 400);
 } catch (DataSchemaNotFound $error) {
     jsonResponse([
@@ -65,14 +90,16 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
     <meta name="description" content="Просмотр приходных и расходных операций кассы">
+    <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'system';</script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <title><?= $isLoginPage ? 'Вход — Касса' : 'Касса — операции' ?></title>
+    <title><?= $isLoginPage ? 'Вход — Касса' : ($isReferencesPage ? 'Справочники — Касса' : 'Касса — операции') ?></title>
     <link rel="stylesheet" href="/css/design-system.css?v=<?= filemtime(__DIR__ . '/css/design-system.css') ?>">
     <link rel="stylesheet" href="/css/app.css?v=<?= filemtime(__DIR__ . '/css/app.css') ?>">
 </head>
 <body>
 <?php if ($isLoginPage): ?>
 <main class="login-page">
+    <button class="theme-toggle" id="theme-toggle" type="button">Тема: Системная</button>
     <section class="login-card">
         <p class="login-card__eyebrow">Berg Kassa</p>
         <h1 class="login-card__title">Вход</h1>
@@ -92,6 +119,98 @@ try {
     </section>
 </main>
 <script src="/js/login.js?v=<?= filemtime(__DIR__ . '/js/login.js') ?>" defer></script>
+<?php elseif ($isReferencesPage): ?>
+<main class="reference-page">
+    <header class="dashboard__header">
+        <div>
+            <p class="dashboard__eyebrow">Настройки</p>
+            <h1 class="dashboard__title">Справочники</h1>
+        </div>
+        <div class="dashboard__session">
+            <button class="theme-toggle" id="theme-toggle" type="button">Тема: Системная</button>
+            <span class="dashboard__user" id="current-user"></span>
+            <label class="dashboard__schema-label">
+                Схема
+                <select class="dashboard__schema" id="data-schema" aria-label="Схема данных"></select>
+            </label>
+            <a class="dashboard__link" href="/">← Операции</a>
+            <p class="dashboard__status" id="status">Загрузка…</p>
+        </div>
+    </header>
+    <section class="reference-manager">
+        <div class="reference-manager__toolbar">
+            <label class="reference-manager__field">
+                <span>Справочник</span>
+                <select id="reference-type">
+                    <option value="accounts">Счета</option>
+                    <option value="currencies">Валюты</option>
+                    <option value="currency_rates">Курсы валют</option>
+                    <option value="directions">Направления</option>
+                    <option value="operation_tree">Операции и подоперации</option>
+                </select>
+            </label>
+            <button class="reference-manager__new" type="button" id="new-reference">+ Добавить</button>
+        </div>
+        <div class="reference-manager__body">
+            <label class="reference-manager__field" id="reference-list-field">
+                <span>Записи</span>
+                <select class="reference-manager__list" id="reference-list" size="12"></select>
+            </label>
+            <section class="reference-hierarchy" id="reference-hierarchy" hidden>
+                <label class="reference-manager__field reference-hierarchy__direction">
+                    <span>Направление</span>
+                    <select id="hierarchy-direction"></select>
+                </label>
+                <div class="reference-hierarchy__columns">
+                    <section class="reference-hierarchy__column" data-hierarchy-type="action_types">
+                        <header class="reference-hierarchy__header"><strong>Операции</strong><span class="reference-hierarchy__buttons"><button type="button" data-edit-hierarchy aria-label="Редактировать операцию">✎</button><button type="button" data-add-hierarchy>+ Добавить</button></span></header>
+                        <input type="search" placeholder="Поиск" aria-label="Поиск операций" data-hierarchy-search>
+                        <select size="12" aria-label="Операции" data-hierarchy-list></select>
+                    </section>
+                    <section class="reference-hierarchy__column" data-hierarchy-type="suboperations_l1">
+                        <header class="reference-hierarchy__header"><strong>Подоперации 1</strong><span class="reference-hierarchy__buttons"><button type="button" data-edit-hierarchy aria-label="Редактировать подоперацию 1">✎</button><button type="button" data-add-hierarchy>+ Добавить</button></span></header>
+                        <input type="search" placeholder="Поиск" aria-label="Поиск подопераций 1" data-hierarchy-search>
+                        <select size="12" aria-label="Подоперации 1" data-hierarchy-list></select>
+                    </section>
+                    <section class="reference-hierarchy__column" data-hierarchy-type="suboperations_l2">
+                        <header class="reference-hierarchy__header"><strong>Подоперации 2</strong><span class="reference-hierarchy__buttons"><button type="button" data-edit-hierarchy aria-label="Редактировать подоперацию 2">✎</button><button type="button" data-add-hierarchy>+ Добавить</button></span></header>
+                        <input type="search" placeholder="Поиск" aria-label="Поиск подопераций 2" data-hierarchy-search>
+                        <select size="12" aria-label="Подоперации 2" data-hierarchy-list></select>
+                    </section>
+                </div>
+            </section>
+            <form class="reference-manager__form" id="reference-form">
+                <input type="hidden" name="id">
+                <label class="reference-manager__field" id="reference-parent-field" hidden>
+                    <span id="reference-parent-label">Родитель</span>
+                    <select name="parent_id"></select>
+                </label>
+                <label class="reference-manager__field" id="reference-name-field">
+                    <span>Название</span>
+                    <input name="name" required>
+                </label>
+                <label class="reference-manager__field" id="reference-date-field" hidden>
+                    <span>Дата и время курса</span>
+                    <input type="datetime-local" name="rate_date">
+                </label>
+                <label class="reference-manager__field" id="reference-rate-field" hidden>
+                    <span>Курс</span>
+                    <input type="number" name="rate" min="0.0001" step="0.0001">
+                </label>
+                <label class="reference-manager__field" id="reference-memo-field">
+                    <span>Примечание</span>
+                    <textarea name="memo" rows="3"></textarea>
+                </label>
+                <p class="reference-manager__message" id="reference-message" role="status"></p>
+                <div class="reference-manager__actions">
+                    <button class="reference-manager__delete" type="button" id="delete-reference" hidden>Удалить</button>
+                    <button class="reference-manager__save" type="submit">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </section>
+</main>
+<script src="/js/references.js?v=<?= filemtime(__DIR__ . '/js/references.js') ?>" defer></script>
 <?php else: ?>
 <main class="dashboard">
     <header class="dashboard__header">
@@ -100,12 +219,14 @@ try {
             <h1 class="dashboard__title">Касса</h1>
         </div>
         <div class="dashboard__session">
+            <button class="theme-toggle" id="theme-toggle" type="button">Тема: Системная</button>
             <span class="dashboard__user" id="current-user"></span>
             <label class="dashboard__schema-label">
                 Схема
                 <select class="dashboard__schema" id="data-schema" aria-label="Схема данных"></select>
             </label>
             <button class="dashboard__logout" type="button" id="logout">Выйти</button>
+            <a class="dashboard__link" href="/references">Справочники</a>
             <p class="dashboard__status" id="status">Загрузка…</p>
         </div>
     </header>
@@ -152,17 +273,23 @@ try {
         <button class="filter-bar__reset" type="button" id="reset-filters">Сбросить</button>
     </form>
 
-    <div class="operations-tabs" role="tablist" aria-label="Тип операции">
-        <button class="operations-tabs__tab operations-tabs__tab--active" id="income-tab" type="button" role="tab"
-                aria-selected="true" aria-controls="income-panel" data-flow-tab="income">Приход</button>
-        <button class="operations-tabs__tab" id="expense-tab" type="button" role="tab" aria-selected="false"
-                aria-controls="expense-panel" data-flow-tab="expense" tabindex="-1">Расход</button>
+    <div class="operations-toolbar">
+        <div class="operations-tabs" role="tablist" aria-label="Тип операции">
+            <button class="operations-tabs__tab operations-tabs__tab--active" id="income-tab" type="button" role="tab"
+                    aria-selected="true" aria-controls="income-panel" data-flow-tab="income">Приход</button>
+            <button class="operations-tabs__tab" id="expense-tab" type="button" role="tab" aria-selected="false"
+                    aria-controls="expense-panel" data-flow-tab="expense" tabindex="-1">Расход</button>
+        </div>
     </div>
     <section class="operations-board" aria-label="Операции">
         <section class="operation-panel operation-panel--active" id="income-panel" role="tabpanel"
                  aria-labelledby="income-tab" data-flow="income">
             <header class="operation-panel__header operation-panel__header--income">
-                <span>Приход</span><span class="operation-panel__count" data-count>0</span>
+                <span class="operation-panel__heading">
+                    <span>Приход</span>
+                    <button class="operation-panel__add" type="button" data-add-flow="income" disabled>+ Добавить</button>
+                </span>
+                <span class="operation-panel__count" data-count>0</span>
             </header>
             <div class="operation-panel__columns-scroll" data-columns-scroll>
                 <div class="operation-panel__columns" aria-hidden="true">
@@ -176,7 +303,11 @@ try {
         <section class="operation-panel" id="expense-panel" role="tabpanel"
                  aria-labelledby="expense-tab" data-flow="expense">
             <header class="operation-panel__header operation-panel__header--expense">
-                <span>Расход</span><span class="operation-panel__count" data-count>0</span>
+                <span class="operation-panel__heading">
+                    <span>Расход</span>
+                    <button class="operation-panel__add" type="button" data-add-flow="expense" disabled>+ Добавить</button>
+                </span>
+                <span class="operation-panel__count" data-count>0</span>
             </header>
             <div class="operation-panel__columns-scroll" data-columns-scroll>
                 <div class="operation-panel__columns" aria-hidden="true">
@@ -203,7 +334,75 @@ try {
             <div class="summary__table-wrap" id="direction-summary"></div>
         </details>
     </section>
+
 </main>
+<dialog class="operation-dialog" id="operation-dialog">
+    <form class="operation-form" id="operation-form">
+        <header class="operation-form__header">
+            <h2 class="operation-form__title" id="operation-form-title">Новая операция</h2>
+            <button class="operation-form__close" type="button" data-close-dialog aria-label="Закрыть">×</button>
+        </header>
+        <input type="hidden" name="id">
+        <div class="operation-form__grid">
+            <label class="operation-form__field">
+                <span>Тип</span>
+                <select name="is_debit" required>
+                    <option value="true">Приход</option>
+                    <option value="false">Расход</option>
+                </select>
+            </label>
+            <label class="operation-form__field">
+                <span>Дата и время</span>
+                <input type="datetime-local" name="action_date" required>
+            </label>
+            <label class="operation-form__field">
+                <span>Счёт</span>
+                <select name="account_id" required></select>
+            </label>
+            <label class="operation-form__field">
+                <span>Валюта</span>
+                <select name="currency_id" required></select>
+            </label>
+            <label class="operation-form__field">
+                <span>Направление</span>
+                <select name="direction_id" required></select>
+            </label>
+            <label class="operation-form__field">
+                <span>Операция</span>
+                <select name="action_type_id" required></select>
+            </label>
+            <label class="operation-form__field">
+                <span>Подоперация 1</span>
+                <select name="suboperation_l1_id" required></select>
+            </label>
+            <label class="operation-form__field">
+                <span>Подоперация 2</span>
+                <select name="suboperation_id" required></select>
+            </label>
+            <label class="operation-form__field">
+                <span>Сумма</span>
+                <input type="number" name="amount" min="0.01" step="0.01" required>
+            </label>
+            <label class="operation-form__field">
+                <span>Курс</span>
+                <input type="number" name="exchange_rate" min="0.0001" step="0.0001">
+            </label>
+            <label class="operation-form__field operation-form__field--wide">
+                <span>Примечание</span>
+                <textarea name="memo" rows="3"></textarea>
+            </label>
+            <label class="operation-form__protected" id="operation-protected-field">
+                <input type="checkbox" name="is_black"> Защищённая операция
+            </label>
+        </div>
+        <p class="operation-form__error" id="operation-form-error" role="alert"></p>
+        <footer class="operation-form__actions">
+            <button class="operation-form__delete" type="button" id="delete-operation" hidden>Удалить</button>
+            <button class="operation-form__cancel" type="button" data-close-dialog>Отмена</button>
+            <button class="operation-form__save" type="submit">Сохранить</button>
+        </footer>
+    </form>
+</dialog>
 <aside class="note-popover" id="note-popover" popover>
     <header class="note-popover__header">
         <strong class="note-popover__title">Примечание</strong>
@@ -213,5 +412,6 @@ try {
 </aside>
 <script src="/js/app.js?v=<?= filemtime(__DIR__ . '/js/app.js') ?>" defer></script>
 <?php endif; ?>
+<script src="/js/theme.js?v=<?= filemtime(__DIR__ . '/js/theme.js') ?>" defer></script>
 </body>
 </html>

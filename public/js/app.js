@@ -8,6 +8,8 @@ const date = new Intl.DateTimeFormat('ru-RU');
 const form = document.querySelector('#filters');
 const status = document.querySelector('#status');
 const notePopover = document.querySelector('#note-popover');
+const operationDialog = document.querySelector('#operation-dialog');
+const operationForm = document.querySelector('#operation-form');
 const lookupFields = {
     account_id: ['accounts'],
     currency_id: ['currencies'],
@@ -136,7 +138,10 @@ class VirtualList {
             note.setAttribute('role', 'button');
             note.setAttribute('aria-label', 'Показать полное примечание');
             const open = () => showNote(note, note.fullText);
-            note.addEventListener('click', open);
+            note.addEventListener('click', event => {
+                event.stopPropagation();
+                open();
+            });
             note.addEventListener('keydown', event => {
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
@@ -149,6 +154,7 @@ class VirtualList {
     row(item, index) {
         const row = document.createElement('article');
         row.className = 'operation-row' + (item.is_black ? ' operation-row--protected' : '');
+        row.dataset.operationId = item.id;
         row.style.transform = `translateY(${index * ROW_HEIGHT}px)`;
         const operation = [item.direction, item.action_type].filter(Boolean).join(' · ') || 'Без направления';
         const suboperation = item.suboperation_placeholder
@@ -157,7 +163,9 @@ class VirtualList {
         const hasNote = Boolean(item.memo?.trim());
         if (hasNote) row.classList.add('operation-row--has-note');
         row.innerHTML = `
-            <time class="operation-row__date">${formatDate(item.action_date)}</time>
+            <button class="operation-row__date" type="button" aria-label="Редактировать операцию от ${formatDate(item.action_date)}">
+                <time datetime="${escapeHtml(item.action_date)}">${formatDate(item.action_date)}</time>
+            </button>
             <span class="operation-row__account">${escapeHtml(item.account)}<small>${escapeHtml(item.currency)}</small></span>
             <span class="operation-row__operation">${escapeHtml(operation)}</span>
             <span class="operation-row__suboperation">
@@ -169,6 +177,11 @@ class VirtualList {
         row.querySelector('.operation-row__operation').title = operation;
         row.querySelector('.operation-row__suboperation').title = suboperation || '';
         if (hasNote) row.querySelector('.operation-row__note').fullText = item.memo;
+        row.querySelector('.operation-row__date').addEventListener('click', event => {
+            event.stopPropagation();
+            openOperation(item);
+        });
+        row.addEventListener('dblclick', () => openOperation(item));
         return row;
     }
 
@@ -256,6 +269,7 @@ function fillSelect(name) {
         select.add(new Option(label, item.id));
     }
     select.value = records.some(item => String(item.id) === selected) ? selected : '';
+    if (!select.value && records.length === 1) select.value = records[0].id;
     delete select.dataset.value;
 }
 
@@ -352,6 +366,129 @@ function showNote(note, text) {
     notePopover.style.visibility = 'visible';
 }
 
+function editorOptions(name, source, parentName, parentField) {
+    const select = operationForm.elements[name];
+    const parentValue = parentName ? operationForm.elements[parentName].value : '';
+    const records = (lookups[source] || []).filter(item => !parentName || String(item[parentField]) === parentValue);
+    select.disabled = Boolean(parentName && !parentValue);
+    select.replaceChildren(new Option(select.disabled ? 'Сначала выберите уровень выше' : 'Выберите', ''));
+    for (const item of records) {
+        const label = item.is_placeholder ? `Неизвестно (ID: ${item.id})` : (item.name || `ID: ${item.id}`);
+        select.add(new Option(label, item.id));
+    }
+    if (records.length === 1) select.value = records[0].id;
+}
+
+function refreshEditorCascade(from = 'direction_id') {
+    const fields = [
+        ['direction_id', 'directions'],
+        ['action_type_id', 'action_types', 'direction_id', 'direction_id'],
+        ['suboperation_l1_id', 'suboperations_l1', 'action_type_id', 'action_type_id'],
+        ['suboperation_id', 'suboperations_l2', 'suboperation_l1_id', 'suboperation_l1_id'],
+    ];
+    const start = Math.max(0, fields.findIndex(([name]) => name === from));
+    for (const field of fields.slice(start)) editorOptions(...field);
+}
+
+function localDateTime(value = new Date()) {
+    const local = new Date(value.getTime() - value.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+}
+
+function openOperation(item = null, isDebit = true) {
+    operationForm.reset();
+    operationForm.querySelector('[name="id"]').value = item?.id || '';
+    operationForm.elements.action_date.value = item?.action_date
+        ? String(item.action_date).replace(' ', 'T').slice(0, 16)
+        : localDateTime();
+    operationForm.elements.is_debit.value = String(item?.is_debit ?? isDebit);
+    operationForm.elements.amount.value = item?.amount ?? '';
+    operationForm.elements.exchange_rate.value = item?.exchange_rate ?? '';
+    operationForm.elements.memo.value = item?.memo ?? '';
+    operationForm.elements.is_black.checked = Boolean(item?.is_black);
+    operationForm.elements.account_id.replaceChildren(new Option('Выберите', ''));
+    operationForm.elements.currency_id.replaceChildren(new Option('Выберите', ''));
+    for (const record of lookups.accounts) operationForm.elements.account_id.add(new Option(record.name || `ID: ${record.id}`, record.id));
+    for (const record of lookups.currencies) operationForm.elements.currency_id.add(new Option(record.name || `ID: ${record.id}`, record.id));
+    operationForm.elements.account_id.value = item?.account_id ?? '';
+    operationForm.elements.currency_id.value = item?.currency_id ?? '';
+    refreshEditorCascade();
+    if (item) {
+        const sub2 = lookups.suboperations_l2.find(record => String(record.id) === String(item.suboperation_id));
+        const sub1 = lookups.suboperations_l1.find(record => String(record.id) === String(sub2?.suboperation_l1_id));
+        const actionType = lookups.action_types.find(record => String(record.id) === String(sub1?.action_type_id));
+        operationForm.elements.direction_id.value = actionType?.direction_id ?? '';
+        refreshEditorCascade('action_type_id');
+        operationForm.elements.action_type_id.value = sub1?.action_type_id ?? '';
+        refreshEditorCascade('suboperation_l1_id');
+        operationForm.elements.suboperation_l1_id.value = sub2?.suboperation_l1_id ?? '';
+        refreshEditorCascade('suboperation_id');
+        operationForm.elements.suboperation_id.value = item.suboperation_id;
+    }
+    document.querySelector('#operation-form-title').textContent = item ? 'Редактирование операции' : 'Новая операция';
+    document.querySelector('#delete-operation').hidden = !item;
+    document.querySelector('#operation-form-error').textContent = '';
+    operationDialog.showModal();
+}
+
+for (const name of ['direction_id', 'action_type_id', 'suboperation_l1_id']) {
+    operationForm.elements[name].addEventListener('change', () => {
+        const next = { direction_id: 'action_type_id', action_type_id: 'suboperation_l1_id', suboperation_l1_id: 'suboperation_id' }[name];
+        refreshEditorCascade(next);
+    });
+}
+
+operationForm.elements.currency_id.addEventListener('change', event => {
+    const currency = lookups.currencies.find(item => String(item.id) === event.target.value);
+    operationForm.elements.exchange_rate.value = currency?.default_rate ?? '';
+});
+
+for (const button of document.querySelectorAll('[data-add-flow]')) {
+    button.addEventListener('click', () => openOperation(null, button.dataset.addFlow === 'income'));
+}
+for (const button of document.querySelectorAll('[data-close-dialog]')) {
+    button.addEventListener('click', () => operationDialog.close());
+}
+
+operationForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const submit = operationForm.querySelector('[type="submit"]');
+    const data = Object.fromEntries(new FormData(operationForm));
+    data.is_debit = data.is_debit === 'true';
+    data.is_black = operationForm.elements.is_black.checked;
+    const id = data.id;
+    delete data.id;
+    submit.disabled = true;
+    try {
+        await fetchJson(id ? `/api/actions/${id}` : '/api/actions', {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': currentUser.csrf_token },
+            body: JSON.stringify(data),
+        });
+        operationDialog.close();
+        await refresh();
+    } catch (error) {
+        document.querySelector('#operation-form-error').textContent = error.message;
+    } finally {
+        submit.disabled = false;
+    }
+});
+
+document.querySelector('#delete-operation').addEventListener('click', async () => {
+    const id = operationForm.querySelector('[name="id"]').value;
+    if (!id || !confirm('Удалить операцию без возможности восстановления?')) return;
+    try {
+        await fetchJson(`/api/actions/${id}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRF-Token': currentUser.csrf_token },
+        });
+        operationDialog.close();
+        await refresh();
+    } catch (error) {
+        document.querySelector('#operation-form-error').textContent = error.message;
+    }
+});
+
 form.addEventListener('change', event => {
     const hierarchy = ['direction_id', 'action_type_id', 'suboperation_l1_id', 'suboperation_l2_id'];
     if (hierarchy.includes(event.target.name)) {
@@ -379,6 +516,7 @@ document.querySelector('#logout').addEventListener('click', async () => {
 });
 
 document.querySelector('#data-schema').addEventListener('change', async event => {
+    for (const button of document.querySelectorAll('[data-add-flow]')) button.disabled = true;
     try {
         await fetchJson('/api/schema', {
             method: 'POST',
@@ -390,6 +528,7 @@ document.querySelector('#data-schema').addEventListener('change', async event =>
         fillSelect('account_id');
         fillSelect('currency_id');
         refreshCascade();
+        for (const button of document.querySelectorAll('[data-add-flow]')) button.disabled = false;
         refresh();
     } catch (error) {
         status.textContent = error.message;
@@ -410,6 +549,7 @@ async function init() {
         schemaSelect.value = currentUser.data_schema;
         const protectedField = document.querySelector('#protected-filter');
         protectedField.hidden = !currentUser.can_view_protected;
+        document.querySelector('#operation-protected-field').hidden = !currentUser.can_view_protected;
         if (!currentUser.can_view_protected) form.elements.include_protected.checked = false;
         restoreFilters();
         if (!currentUser.can_view_protected) form.elements.include_protected.checked = false;
@@ -421,6 +561,7 @@ async function init() {
         fillSelect('account_id');
         fillSelect('currency_id');
         refreshCascade();
+        for (const button of document.querySelectorAll('[data-add-flow]')) button.disabled = false;
         refresh();
     } catch (error) {
         status.textContent = error.message;
