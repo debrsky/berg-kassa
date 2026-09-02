@@ -2,6 +2,8 @@ const { test, expect } = require('@playwright/test');
 
 const login = process.env.E2E_USER;
 const password = process.env.E2E_PASSWORD;
+const restrictedLogin = process.env.E2E_RESTRICTED_USER;
+const restrictedPassword = process.env.E2E_RESTRICTED_PASSWORD;
 
 test('неавторизованного пользователя перенаправляет на вход', async ({ page }) => {
     await page.goto('/');
@@ -58,6 +60,14 @@ test('ссылка на журнал соответствует праву и ж
     await link.click();
     await expect(page.getByRole('heading', { name: 'Журнал аудита' })).toBeVisible();
     await expect(page.locator('#audit-rows tr')).not.toHaveCount(0);
+});
+
+test('пользователь без права защищённых операций не открывает страницу журнала', async ({ page }) => {
+    test.skip(!restrictedLogin || !restrictedPassword, 'Задайте E2E_RESTRICTED_USER и E2E_RESTRICTED_PASSWORD');
+    await page.request.post('/api/logout', { headers: { 'X-CSRF-Token': (await (await page.request.get('/api/me')).json()).csrf_token } });
+    expect((await page.request.post('/api/login', { data: { login: restrictedLogin, password: restrictedPassword } })).ok()).toBeTruthy();
+    expect((await (await page.request.get('/api/me')).json()).can_view_protected).toBe(false);
+    expect((await page.goto('/audit')).status()).toBe(403);
 });
 
 test('дата открывает редактор существующей операции', async ({ page }) => {

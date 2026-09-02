@@ -2,6 +2,8 @@ const { test, expect } = require('@playwright/test');
 
 const login = process.env.E2E_USER;
 const password = process.env.E2E_PASSWORD;
+const restrictedLogin = process.env.E2E_RESTRICTED_USER;
+const restrictedPassword = process.env.E2E_RESTRICTED_PASSWORD;
 let csrf;
 
 test.beforeEach(async ({ request }) => {
@@ -192,6 +194,13 @@ test('журнал аудита доступен только с правом з
         const filtered = await (await request.get(`/api/audit-log?event=${encodeURIComponent(data.events[0])}&from_date=2020-01-01&to_date=2099-12-31&limit=5`)).json();
         expect(filtered.items.every(item => item.event === data.events[0])).toBeTruthy();
     }
+});
+
+test('пользователь без права защищённых операций не получает журнал аудита', async ({ request }) => {
+    test.skip(!restrictedLogin || !restrictedPassword, 'Задайте E2E_RESTRICTED_USER и E2E_RESTRICTED_PASSWORD');
+    expect((await request.post('/api/login', { data: { login: restrictedLogin, password: restrictedPassword } })).ok()).toBeTruthy();
+    expect((await (await request.get('/api/me')).json()).can_view_protected).toBe(false);
+    expect((await request.get('/api/audit-log')).status()).toBe(403);
 });
 
 test('CRUD дерева операций очищает созданные записи', async ({ request }) => {
