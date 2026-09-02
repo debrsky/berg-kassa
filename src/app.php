@@ -196,15 +196,42 @@ function selectDataSchema(array $user): never
     jsonResponse(['ok' => true]);
 }
 
+function loginAttemptFile(string $ip): string
+{
+    // ponytail: local rate limit; move to a shared store when the app runs on multiple servers.
+    return sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'berg-kassa-login-' . hash('sha256', $ip);
+}
+
+function loginAttempts(string $ip, int $now): array
+{
+    $handle = fopen(loginAttemptFile($ip), 'c+');
+    if ($handle === false || !flock($handle, LOCK_EX)) {
+        throw new RuntimeException('Unable to lock login rate limit');
+    }
+    $attempts = json_decode(stream_get_contents($handle) ?: '[]', true);
+    $attempts = array_values(array_filter(is_array($attempts) ? $attempts : [], fn ($time) => is_int($time) && $time > $now - 60));
+    return [$handle, $attempts];
+}
+
+function saveLoginAttempts($handle, array $attempts): void
+{
+    rewind($handle);
+    ftruncate($handle, 0);
+    fwrite($handle, json_encode($attempts, JSON_THROW_ON_ERROR));
+    fflush($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
+}
+
 function login(): never
 {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         jsonResponse(['error' => 'Method not allowed'], 405);
     }
     $now = time();
-    $attempts = $_SESSION['login_attempts'] ?? [];
-    $attempts = array_values(array_filter($attempts, fn (int $time) => $time > $now - 60));
+    [$attemptHandle, $attempts] = loginAttempts((string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), $now);
     if (count($attempts) >= 5) {
+        saveLoginAttempts($attemptHandle, $attempts);
         jsonResponse(['error' => 'Слишком много попыток. Повторите через минуту.'], 429);
     }
     $body = json_decode(file_get_contents('php://input'), true);
@@ -217,10 +244,11 @@ function login(): never
     $account = $statement->fetch();
     if (!$account || !password_verify($password, $account['password_hash'])) {
         $attempts[] = $now;
-        $_SESSION['login_attempts'] = $attempts;
+        saveLoginAttempts($attemptHandle, $attempts);
         usleep(250_000);
         jsonResponse(['error' => 'Неверный логин или пароль'], 401);
     }
+    saveLoginAttempts($attemptHandle, []);
     session_regenerate_id(true);
     $_SESSION = ['user_id' => (int) $account['id'], 'csrf' => bin2hex(random_bytes(32))];
     jsonResponse(['ok' => true]);

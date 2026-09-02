@@ -62,4 +62,13 @@ try {
 }
 check(strlen(csrfToken()) === 64, 'CSRF token has expected entropy');
 
+$ip = 'unit-test-' . bin2hex(random_bytes(8));
+[$handle, $attempts] = loginAttempts($ip, 1000);
+check($attempts === [], 'login rate limit starts empty');
+saveLoginAttempts($handle, [900, 950, 1000]);
+[$handle, $attempts] = loginAttempts($ip, 1001);
+check($attempts === [950, 1000], 'login rate limit expires old attempts');
+saveLoginAttempts($handle, []);
+unlink(loginAttemptFile($ip));
+
 echo "Unit: {$passed} passed\n";
