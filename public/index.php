@@ -10,6 +10,7 @@ $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $isLoginPage = $path === '/login';
 $isReferencesPage = $path === '/references';
 $isAuditPage = $path === '/audit';
+$isUsersPage = $path === '/users';
 
 try {
     if ($path === '/api/login') {
@@ -20,16 +21,14 @@ try {
             header('Location: /');
             exit;
         }
-    } elseif ($path === '/' || $isReferencesPage || $isAuditPage) {
+    } elseif ($path === '/' || $isReferencesPage || $isAuditPage || $isUsersPage) {
         $pageUser = currentUser();
         if (!$pageUser) {
             header('Location: /login');
             exit;
         }
-        if ($isAuditPage && !$pageUser['can_view_protected']) {
-            auditEvent('access.denied', $pageUser, details: ['reason' => 'audit_access_denied']);
-            jsonResponse(['error' => 'Audit log access denied'], 403);
-        }
+        if ($isAuditPage) requireProtectedAccess($pageUser, 'audit_access_denied');
+        if ($isUsersPage) requireProtectedAccess($pageUser, 'users_access_denied');
     } elseif (str_starts_with($path, '/api/')) {
         $user = requireUser();
         if ($path === '/api/schema') {
@@ -43,6 +42,12 @@ try {
         }
         if ($path === '/api/audit-log') {
             auditLog($user);
+        }
+        if ($path === '/api/users') {
+            users($user);
+        }
+        if (preg_match('#^/api/users/([1-9][0-9]*)$#', $path, $match)) {
+            users($user, (int) $match[1]);
         }
         useDataSchema($user['data_schema']);
         if ($path === '/api/actions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -101,7 +106,7 @@ try {
     <meta name="description" content="Просмотр приходных и расходных операций кассы">
     <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'system';</script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <title><?= $isLoginPage ? 'Вход — Касса' : ($isReferencesPage ? 'Справочники — Касса' : ($isAuditPage ? 'Журнал аудита — Касса' : 'Касса — операции')) ?></title>
+    <title><?= $isLoginPage ? 'Вход — Касса' : ($isReferencesPage ? 'Справочники — Касса' : ($isAuditPage ? 'Журнал аудита — Касса' : ($isUsersPage ? 'Пользователи — Касса' : 'Касса — операции'))) ?></title>
     <link rel="stylesheet" href="/css/design-system.css?v=<?= filemtime(__DIR__ . '/css/design-system.css') ?>">
     <link rel="stylesheet" href="/css/app.css?v=<?= filemtime(__DIR__ . '/css/app.css') ?>">
 </head>
@@ -140,6 +145,7 @@ try {
             <span class="dashboard__user" id="current-user"></span>
             <button class="dashboard__logout" type="button" id="logout">Выйти</button>
             <a class="dashboard__link" href="/">← Операции</a>
+            <a class="dashboard__link" href="/users">Пользователи</a>
             <p class="dashboard__status" id="status">Загрузка…</p>
         </div>
     </header>
@@ -166,6 +172,36 @@ try {
     </section>
 </main>
 <script src="/js/audit.js?v=<?= filemtime(__DIR__ . '/js/audit.js') ?>" defer></script>
+<?php elseif ($isUsersPage): ?>
+<main class="users-page">
+    <header class="dashboard__header">
+        <div><p class="dashboard__eyebrow">Безопасность</p><h1 class="dashboard__title">Пользователи</h1></div>
+        <div class="dashboard__session">
+            <button class="theme-toggle" id="theme-toggle" type="button">Тема: Системная</button>
+            <span class="dashboard__user" id="current-user"></span>
+            <button class="dashboard__logout" type="button" id="logout">Выйти</button>
+            <a class="dashboard__link" href="/">← Операции</a>
+            <a class="dashboard__link" href="/audit">Журнал аудита</a>
+            <p class="dashboard__status" id="status">Загрузка…</p>
+        </div>
+    </header>
+    <section class="users-manager">
+        <div class="audit-log__scroll">
+            <table><thead><tr><th>Логин</th><th>Схемы</th><th>Защищённые операции</th><th>Активен</th><th></th></tr></thead><tbody id="user-rows"></tbody></table>
+        </div>
+        <form class="reference-manager__form" id="user-form">
+            <input type="hidden" name="id">
+            <label class="reference-manager__field"><span>Логин</span><input name="login" maxlength="100" autocomplete="off" required></label>
+            <label class="reference-manager__field"><span>Схемы через запятую</span><input name="data_schemas" placeholder="vl, company_2" required></label>
+            <label class="reference-manager__field"><span>Пароль <small id="password-hint">(обязателен для нового пользователя)</small></span><input type="password" name="password" minlength="12" autocomplete="new-password"></label>
+            <label><input type="checkbox" name="can_view_protected"> Доступ к защищённым операциям</label>
+            <label><input type="checkbox" name="is_active" checked> Активен</label>
+            <p class="reference-manager__message" id="user-message" role="status"></p>
+            <div class="reference-manager__actions"><button type="button" id="new-user">Новый</button><button class="reference-manager__save" type="submit">Сохранить</button></div>
+        </form>
+    </section>
+</main>
+<script src="/js/users.js?v=<?= filemtime(__DIR__ . '/js/users.js') ?>" defer></script>
 <?php elseif ($isReferencesPage): ?>
 <main class="reference-page">
     <header class="dashboard__header">
@@ -182,6 +218,7 @@ try {
             </label>
             <a class="dashboard__link" href="/">← Операции</a>
             <a class="dashboard__link" id="audit-link" href="/audit" hidden>Журнал аудита</a>
+            <a class="dashboard__link" id="users-link" href="/users" hidden>Пользователи</a>
             <p class="dashboard__status" id="status">Загрузка…</p>
         </div>
     </header>
@@ -276,6 +313,7 @@ try {
             <button class="dashboard__logout" type="button" id="logout">Выйти</button>
             <a class="dashboard__link" href="/references">Справочники</a>
             <a class="dashboard__link" id="audit-link" href="/audit" hidden>Журнал аудита</a>
+            <a class="dashboard__link" id="users-link" href="/users" hidden>Пользователи</a>
             <p class="dashboard__status" id="status">Загрузка…</p>
         </div>
     </header>
@@ -313,12 +351,16 @@ try {
             <span class="filter-bar__label">Подоперация 2</span>
             <select class="filter-bar__control" name="suboperation_l2_id"></select>
         </label>
+        <?php if ($pageUser['can_view_protected']): ?>
         <label class="filter-bar__field filter-bar__field--checkbox" id="protected-filter">
             <span class="filter-bar__checkbox-label">
                 <input type="checkbox" name="include_protected" value="1">
                 Защищённые
             </span>
         </label>
+        <?php else: ?>
+        <input type="checkbox" name="include_protected" hidden>
+        <?php endif; ?>
         <button class="filter-bar__reset" type="button" id="reset-filters">Сбросить</button>
     </form>
 
@@ -442,9 +484,13 @@ try {
                 <span>Примечание</span>
                 <textarea name="memo" rows="3"></textarea>
             </label>
+            <?php if ($pageUser['can_view_protected']): ?>
             <label class="operation-form__protected" id="operation-protected-field">
                 <input type="checkbox" name="is_black"> Защищённая операция
             </label>
+            <?php else: ?>
+            <input type="checkbox" name="is_black" hidden>
+            <?php endif; ?>
             <details class="operation-form__posting" id="operation-posting">
                 <summary class="operation-form__posting-title">Выполнить проводку</summary>
                 <div class="operation-form__posting-fields">

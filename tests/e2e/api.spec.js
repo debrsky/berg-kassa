@@ -201,6 +201,20 @@ test('пользователь без права защищённых опера
     expect((await request.post('/api/login', { data: { login: restrictedLogin, password: restrictedPassword } })).ok()).toBeTruthy();
     expect((await (await request.get('/api/me')).json()).can_view_protected).toBe(false);
     expect((await request.get('/api/audit-log')).status()).toBe(403);
+    expect((await request.get('/api/users')).status()).toBe(403);
+});
+
+test('управление пользователями доступно только с защищённым правом', async ({ request }) => {
+    const me = await (await request.get('/api/me')).json();
+    const response = await request.get('/api/users');
+    if (!me.can_view_protected) {
+        expect(response.status()).toBe(403);
+        return;
+    }
+    expect(response.ok()).toBeTruthy();
+    const data = await response.json();
+    expect(Array.isArray(data.items)).toBeTruthy();
+    expect(data.items.every(item => !('password_hash' in item))).toBeTruthy();
 });
 
 test('CRUD дерева операций очищает созданные записи', async ({ request }) => {

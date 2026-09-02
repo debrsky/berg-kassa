@@ -273,6 +273,7 @@ async function init() {
         currentUser = await fetchJson('/api/me');
         document.querySelector('#current-user').textContent = currentUser.login;
         document.querySelector('#audit-link').hidden = !currentUser.can_view_protected;
+        document.querySelector('#users-link').hidden = !currentUser.can_view_protected;
         const schemaSelect = document.querySelector('#data-schema');
         const unavailable = new Set(currentUser.unavailable_data_schemas);
         schemaSelect.replaceChildren(...currentUser.data_schemas.map(schema => {

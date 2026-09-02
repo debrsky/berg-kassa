@@ -232,6 +232,14 @@ function requireCsrf(?array $user = null): void
     }
 }
 
+function requireProtectedAccess(array $user, string $reason): void
+{
+    if (!$user['can_view_protected']) {
+        auditEvent('access.denied', $user, details: ['reason' => $reason]);
+        jsonResponse(['error' => 'Protected access required'], 403);
+    }
+}
+
 function selectDataSchema(array $user): never
 {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -348,10 +356,7 @@ function me(array $user): never
 
 function auditLog(array $user): never
 {
-    if (!$user['can_view_protected']) {
-        auditEvent('access.denied', $user, details: ['reason' => 'audit_access_denied']);
-        jsonResponse(['error' => 'Audit log access denied'], 403);
-    }
+    requireProtectedAccess($user, 'audit_access_denied');
     $offset = (string) ($_GET['offset'] ?? '0');
     $limit = (string) ($_GET['limit'] ?? '50');
     if (!ctype_digit($offset) || !ctype_digit($limit) || (int) $limit < 1 || (int) $limit > 100) {
@@ -400,6 +405,94 @@ function auditLog(array $user): never
         'total' => $total,
         'events' => $pdo->query('SELECT DISTINCT event FROM auth.audit_log ORDER BY event')->fetchAll(PDO::FETCH_COLUMN),
     ]);
+}
+
+function users(array $actor, ?int $id = null): never
+{
+    requireProtectedAccess($actor, 'users_access_denied');
+    if ($_SERVER['REQUEST_METHOD'] === 'GET' && $id === null) {
+        $items = db()->query(
+            'SELECT id, login, to_json(data_schema)::text AS data_schemas_json, can_view_protected, is_active, created_at '
+            . 'FROM auth.users ORDER BY lower(login)'
+        )->fetchAll();
+        foreach ($items as &$item) {
+            $item['id'] = (int) $item['id'];
+            $item['data_schemas'] = json_decode($item['data_schemas_json'], true, flags: JSON_THROW_ON_ERROR);
+            $item['can_view_protected'] = (bool) $item['can_view_protected'];
+            $item['is_active'] = (bool) $item['is_active'];
+            unset($item['data_schemas_json']);
+        }
+        jsonResponse(['items' => $items]);
+    }
+    if (($id === null && $_SERVER['REQUEST_METHOD'] !== 'POST') || ($id !== null && $_SERVER['REQUEST_METHOD'] !== 'PUT')) {
+        jsonResponse(['error' => 'Method not allowed'], 405);
+    }
+    requireCsrf($actor);
+    $body = json_decode(file_get_contents('php://input'), true, flags: JSON_THROW_ON_ERROR);
+    $login = trim((string) ($body['login'] ?? ''));
+    $schemas = array_values(array_unique(array_map('trim', is_array($body['data_schemas'] ?? null) ? $body['data_schemas'] : [])));
+    $password = (string) ($body['password'] ?? '');
+    $protected = ($body['can_view_protected'] ?? false) === true;
+    $active = ($body['is_active'] ?? true) === true;
+    if ($login === '' || strlen($login) > 100 || !$schemas
+        || array_filter($schemas, fn ($schema) => !is_string($schema) || !preg_match('/^[a-z_][a-z0-9_]*$/', $schema))) {
+        throw new InvalidArgumentException('Invalid user fields');
+    }
+    if (($id === null || $password !== '') && strlen($password) < 12) {
+        throw new InvalidArgumentException('Password must contain at least 12 characters');
+    }
+    if ($id === (int) $actor['id'] && (!$protected || !$active)) {
+        throw new InvalidArgumentException('Нельзя отозвать собственный защищённый доступ или отключить свою учётную запись');
+    }
+    $duplicate = db()->prepare('SELECT 1 FROM auth.users WHERE lower(login) = lower(:login)' . ($id === null ? '' : ' AND id <> :id'));
+    $duplicate->execute(array_filter(['login' => $login, 'id' => $id], fn ($value) => $value !== null));
+    if ($duplicate->fetchColumn()) {
+        jsonResponse(['error' => 'Пользователь с таким логином уже существует'], 409);
+    }
+    $old = null;
+    if ($id !== null) {
+        $statement = db()->prepare('SELECT id, login, data_schema, can_view_protected, is_active FROM auth.users WHERE id = :id');
+        $statement->execute(['id' => $id]);
+        $old = $statement->fetch();
+        if (!$old) jsonResponse(['error' => 'User not found'], 404);
+    }
+    $params = [
+        'login' => $login,
+        'data_schema' => '{' . implode(',', $schemas) . '}',
+        'can_view_protected' => $protected ? '1' : '0',
+        'is_active' => $active ? '1' : '0',
+    ];
+    if ($id === null) {
+        $params['password_hash'] = password_hash($password, PASSWORD_ARGON2ID);
+        $statement = db()->prepare(
+            'INSERT INTO auth.users (login, password_hash, data_schema, can_view_protected, is_active) '
+            . 'VALUES (:login, :password_hash, :data_schema, :can_view_protected, :is_active) RETURNING id'
+        );
+    } else {
+        $params['id'] = $id;
+        $passwordSql = '';
+        if ($password !== '') {
+            $params['password_hash'] = password_hash($password, PASSWORD_ARGON2ID);
+            $passwordSql = ', password_hash = :password_hash';
+        }
+        $statement = db()->prepare(
+            'UPDATE auth.users SET login = :login, data_schema = :data_schema, can_view_protected = :can_view_protected, '
+            . 'is_active = :is_active' . $passwordSql . ' WHERE id = :id RETURNING id'
+        );
+    }
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $statement->execute($params);
+        $savedId = (int) $statement->fetchColumn();
+        $new = compact('login', 'schemas', 'protected', 'active');
+        auditEvent('user.' . ($id === null ? 'created' : 'updated'), $actor, 'users', $savedId, ['old' => $old, 'new' => $new], pdo: $pdo);
+        $pdo->commit();
+    } catch (Throwable $error) {
+        $pdo->rollBack();
+        throw $error;
+    }
+    jsonResponse(['id' => $savedId], $id === null ? 201 : 200);
 }
 
 function jsonResponse(mixed $data, int $status = 200): never

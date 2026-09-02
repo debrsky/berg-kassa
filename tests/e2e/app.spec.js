@@ -35,14 +35,17 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('основная страница и форма добавления работают', async ({ page }) => {
+    const me = await (await page.request.get('/api/me')).json();
     await expect(page.getByRole('heading', { name: 'Касса' })).toBeVisible();
     await expect(page.getByLabel('Начало периода')).toBeVisible();
     const protectedFilter = page.locator('#filters [name="include_protected"]');
+    await expect(protectedFilter).toBeVisible({ visible: me.can_view_protected });
     if (await protectedFilter.isVisible()) await protectedFilter.check();
     const addIncome = page.locator('[data-add-flow="income"]');
     await expect(addIncome).toBeEnabled();
     await addIncome.click();
     await expect(page.locator('#operation-dialog')).toBeVisible();
+    await expect(page.locator('#operation-form [name="is_black"]')).toBeVisible({ visible: me.can_view_protected });
     await expect(page.locator('#operation-form [name="is_debit"]')).toHaveValue('true');
     await expect(page.locator('#operation-form [name="currency_id"] option:checked')).toHaveText('р.');
     expect(await page.locator('#operation-form [name="is_black"]').isChecked()).toBe(await protectedFilter.isChecked());
@@ -68,6 +71,20 @@ test('пользователь без права защищённых опера
     expect((await page.request.post('/api/login', { data: { login: restrictedLogin, password: restrictedPassword } })).ok()).toBeTruthy();
     expect((await (await page.request.get('/api/me')).json()).can_view_protected).toBe(false);
     expect((await page.goto('/audit')).status()).toBe(403);
+    expect((await page.goto('/users')).status()).toBe(403);
+});
+
+test('ссылка на управление пользователями соответствует праву', async ({ page }) => {
+    const me = await (await page.request.get('/api/me')).json();
+    const link = page.locator('#users-link');
+    if (!me.can_view_protected) {
+        await expect(link).toBeHidden();
+        return;
+    }
+    await expect(link).toBeVisible();
+    await link.click();
+    await expect(page.getByRole('heading', { name: 'Пользователи' })).toBeVisible();
+    await expect(page.locator('#user-rows tr')).not.toHaveCount(0);
 });
 
 test('дата открывает редактор существующей операции', async ({ page }) => {

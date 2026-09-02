@@ -37,12 +37,45 @@
     padding: var(--space-4);
 }
 
-.audit-page {
+.audit-page,
+.users-page {
     display: grid;
     min-height: 100vh;
     align-content: start;
     gap: var(--space-4);
     padding: var(--space-4);
+}
+
+.users-manager {
+    display: grid;
+    grid-template-columns: minmax(32rem, 2fr) minmax(18rem, 1fr);
+    gap: var(--space-4);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+}
+
+.users-manager table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+.users-manager th,
+.users-manager td {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.users-manager button {
+    min-height: 2.25rem;
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
 }
 
 .audit-filter {
@@ -1112,6 +1145,9 @@
 }
 
 @media (max-width: 1199px) {
+    .users-manager {
+        grid-template-columns: 1fr;
+    }
     .filter-bar {
         grid-template-columns: repeat(3, minmax(9rem, 1fr));
     }
@@ -1157,7 +1193,8 @@
         padding: var(--space-3);
     }
 
-    .audit-page {
+    .audit-page,
+    .users-page {
         gap: var(--space-3);
         padding: var(--space-3);
     }
@@ -1222,6 +1259,7 @@
 @media (max-width: 479px) {
     .dashboard,
     .audit-page,
+    .users-page,
     .reference-page,
     .login-page {
         padding: var(--space-2);

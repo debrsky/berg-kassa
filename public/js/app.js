@@ -574,6 +574,7 @@ async function init() {
         currentUser = await fetchJson('/api/me');
         document.querySelector('#current-user').textContent = currentUser.login;
         document.querySelector('#audit-link').hidden = !currentUser.can_view_protected;
+        document.querySelector('#users-link').hidden = !currentUser.can_view_protected;
         const schemaSelect = document.querySelector('#data-schema');
         const unavailable = new Set(currentUser.unavailable_data_schemas);
         schemaSelect.replaceChildren(...currentUser.data_schemas.map(schema => {
@@ -583,8 +584,9 @@ async function init() {
         }));
         schemaSelect.value = currentUser.data_schema;
         const protectedField = document.querySelector('#protected-filter');
-        protectedField.hidden = !currentUser.can_view_protected;
-        document.querySelector('#operation-protected-field').hidden = !currentUser.can_view_protected;
+        if (protectedField) protectedField.hidden = !currentUser.can_view_protected;
+        const operationProtectedField = document.querySelector('#operation-protected-field');
+        if (operationProtectedField) operationProtectedField.hidden = !currentUser.can_view_protected;
         if (!currentUser.can_view_protected) form.elements.include_protected.checked = false;
         restoreFilters();
         if (!currentUser.can_view_protected) form.elements.include_protected.checked = false;
