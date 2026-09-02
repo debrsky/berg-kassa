@@ -7,13 +7,35 @@ Get-Content (Join-Path $project '.env') | ForEach-Object {
     }
 }
 
-foreach ($name in 'FTP_KASSA_HOST','FTP_KASSA_PORT','FTP_KASSA_USER','FTP_KASSA_PASSWORD') {
+foreach ($name in 'FTP_KASSA_HOST','FTP_KASSA_PORT','FTP_KASSA_USER','FTP_KASSA_PASSWORD','HOSTING_PGSQL_HOST','HOSTING_PGSQL_PORT','HOSTING_PGSQL_USER','HOSTING_PGSQL_PASSWORD','HOSTING_PGSQL_DATABASE') {
     if (-not [Environment]::GetEnvironmentVariable($name)) { throw "Missing environment setting: $name" }
+}
+
+$localSettings = @{
+    LOCAL_PGSQL_HOST = $env:HOSTING_PGSQL_HOST
+    LOCAL_PGSQL_PORT = $env:HOSTING_PGSQL_PORT
+    LOCAL_PGSQL_USER = $env:HOSTING_PGSQL_USER
+    LOCAL_PGSQL_PASSWORD = $env:HOSTING_PGSQL_PASSWORD
+    LOCAL_PGSQL_DATABASE = $env:HOSTING_PGSQL_DATABASE
+}
+$previousSettings = @{}
+try {
+    foreach ($name in $localSettings.Keys) {
+        $previousSettings[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+        [Environment]::SetEnvironmentVariable($name, $localSettings[$name], 'Process')
+    }
+    & (Join-Path $project '.tools\php\php.exe') (Join-Path $project 'bin\create-user.php')
+    if ($LASTEXITCODE -ne 0) { throw "Database initialization failed with exit code $LASTEXITCODE" }
+} finally {
+    foreach ($name in $previousSettings.Keys) {
+        [Environment]::SetEnvironmentVariable($name, $previousSettings[$name], 'Process')
+    }
 }
 
 $uploads = @(
     @{ Local = (Join-Path $project 'src\app.php'); Remote = 'src/app.php' },
-    @{ Local = (Join-Path $project 'bin\create-user.php'); Remote = 'bin/create-user.php' }
+    @{ Local = (Join-Path $project 'bin\create-user.php'); Remote = 'bin/create-user.php' },
+    @{ Local = (Join-Path $project 'bin\prune-audit-log.php'); Remote = 'bin/prune-audit-log.php' }
 )
 $publicRoot = (Resolve-Path (Join-Path $project 'public')).Path.TrimEnd('\')
 Get-ChildItem $publicRoot -File -Recurse -Force |

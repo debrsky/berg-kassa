@@ -69,6 +69,33 @@ function initAuth(PDO $pdo): void
             created_at timestamptz NOT NULL DEFAULT now()
         );
         CREATE UNIQUE INDEX IF NOT EXISTS users_login_lower_idx ON auth.users (lower(login));
+        CREATE TABLE IF NOT EXISTS auth.audit_log (
+            id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            event text NOT NULL,
+            user_id bigint,
+            login text,
+            ip inet,
+            data_schema text,
+            entity text,
+            entity_id bigint,
+            details jsonb NOT NULL DEFAULT '{}'::jsonb
+        );
+        CREATE INDEX IF NOT EXISTS audit_log_created_at_idx ON auth.audit_log (created_at);
+        CREATE INDEX IF NOT EXISTS audit_log_event_idx ON auth.audit_log (event);
+        CREATE INDEX IF NOT EXISTS audit_log_user_id_idx ON auth.audit_log (user_id);
+        CREATE OR REPLACE FUNCTION auth.audit_log_append_only() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+            IF current_setting('app.audit_maintenance', true) IS DISTINCT FROM 'on' THEN
+                RAISE EXCEPTION 'Audit log is append-only';
+            END IF;
+            RETURN OLD;
+        END $$;
+        CREATE OR REPLACE TRIGGER audit_log_append_only
+            BEFORE UPDATE OR DELETE ON auth.audit_log
+            FOR EACH ROW EXECUTE FUNCTION auth.audit_log_append_only();
+        REVOKE UPDATE, DELETE ON auth.audit_log FROM PUBLIC;
         ALTER TABLE auth.users DROP CONSTRAINT IF EXISTS users_data_schema_fkey;
         DO $$
         BEGIN
@@ -142,6 +169,7 @@ function requireUser(): array
 {
     $user = currentUser();
     if (!$user) {
+        auditEvent('access.denied', details: ['reason' => 'authentication_required']);
         jsonResponse(['error' => 'Authentication required'], 401);
     }
     return $user;
@@ -170,9 +198,36 @@ function csrfToken(): string
     return $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 }
 
-function requireCsrf(): void
+function auditEvent(
+    string $event,
+    ?array $user = null,
+    ?string $entity = null,
+    ?int $entityId = null,
+    array $details = [],
+    ?string $login = null,
+    ?PDO $pdo = null,
+): void {
+    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    $statement = ($pdo ?? db())->prepare(
+        'INSERT INTO auth.audit_log (event, user_id, login, ip, data_schema, entity, entity_id, details) '
+        . 'VALUES (:event, :user_id, :login, :ip, :data_schema, :entity, :entity_id, :details)'
+    );
+    $statement->execute([
+        'event' => $event,
+        'user_id' => $user['id'] ?? null,
+        'login' => $login ?? ($user['login'] ?? null),
+        'ip' => filter_var($ip, FILTER_VALIDATE_IP) ? $ip : null,
+        'data_schema' => $user['data_schema'] ?? null,
+        'entity' => $entity,
+        'entity_id' => $entityId,
+        'details' => json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+    ]);
+}
+
+function requireCsrf(?array $user = null): void
 {
     if (!hash_equals(csrfToken(), (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
+        auditEvent('access.denied', $user, details: ['reason' => 'invalid_csrf']);
         jsonResponse(['error' => 'Invalid CSRF token'], 403);
     }
 }
@@ -183,17 +238,21 @@ function selectDataSchema(array $user): never
         jsonResponse(['error' => 'Method not allowed'], 405);
     }
     if (!hash_equals(csrfToken(), (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
+        auditEvent('access.denied', $user, details: ['reason' => 'invalid_csrf']);
         jsonResponse(['error' => 'Invalid CSRF token'], 403);
     }
     $body = json_decode(file_get_contents('php://input'), true);
     $schema = (string) ($body['data_schema'] ?? '');
     if (!in_array($schema, $user['data_schemas'], true)) {
+        auditEvent('access.denied', $user, details: ['reason' => 'schema_access_denied', 'requested_schema' => $schema]);
         jsonResponse(['error' => 'Schema access denied'], 403);
     }
     if (!schemaExists($schema)) {
         throw new DataSchemaNotFound($schema);
     }
     $_SESSION['data_schema'] = $schema;
+    $user['data_schema'] = $schema;
+    auditEvent('schema.selected', $user);
     jsonResponse(['ok' => true]);
 }
 
@@ -230,39 +289,45 @@ function login(): never
         jsonResponse(['error' => 'Method not allowed'], 405);
     }
     $now = time();
-    [$attemptHandle, $attempts] = loginAttempts((string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown'), $now);
+    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    [$attemptHandle, $attempts] = loginAttempts($ip, $now);
     if (count($attempts) >= 5) {
         saveLoginAttempts($attemptHandle, $attempts);
+        auditEvent('login.rate_limited');
         jsonResponse(['error' => 'Слишком много попыток. Повторите через минуту.'], 429);
     }
     $body = json_decode(file_get_contents('php://input'), true);
     $login = trim((string) ($body['login'] ?? ''));
     $password = (string) ($body['password'] ?? '');
     $statement = db()->prepare(
-        'SELECT id, password_hash FROM auth.users WHERE lower(login) = lower(:login) AND is_active'
+        'SELECT id, login, password_hash FROM auth.users WHERE lower(login) = lower(:login) AND is_active'
     );
     $statement->execute(['login' => $login]);
     $account = $statement->fetch();
     if (!$account || !password_verify($password, $account['password_hash'])) {
         $attempts[] = $now;
         saveLoginAttempts($attemptHandle, $attempts);
+        auditEvent('login.failed', login: $login);
         usleep(250_000);
         jsonResponse(['error' => 'Неверный логин или пароль'], 401);
     }
     saveLoginAttempts($attemptHandle, []);
     session_regenerate_id(true);
     $_SESSION = ['user_id' => (int) $account['id'], 'csrf' => bin2hex(random_bytes(32))];
+    auditEvent('login.success', ['id' => (int) $account['id'], 'login' => $account['login']]);
     jsonResponse(['ok' => true]);
 }
 
-function logout(): never
+function logout(array $user): never
 {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         jsonResponse(['error' => 'Method not allowed'], 405);
     }
     if (!hash_equals(csrfToken(), (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
+        auditEvent('access.denied', $user, details: ['reason' => 'invalid_csrf']);
         jsonResponse(['error' => 'Invalid CSRF token'], 403);
     }
+    auditEvent('logout', $user);
     $_SESSION = [];
     session_destroy();
     jsonResponse(['ok' => true]);
@@ -502,12 +567,20 @@ function referenceBody(array $config): array
     return $values;
 }
 
-function writeReference(string $type, ?int $id = null): never
+function writeReference(array $user, string $type, ?int $id = null): never
 {
-    requireCsrf();
+    requireCsrf($user);
     $config = referenceConfig($type);
     $values = referenceBody($config);
     $columns = array_keys($values);
+    $pdo = db();
+    $pdo->beginTransaction();
+    $old = null;
+    if ($id !== null) {
+        $statement = $pdo->prepare("SELECT * FROM {$config['table']} WHERE id = :id");
+        $statement->execute(['id' => $id]);
+        $old = $statement->fetch() ?: null;
+    }
     if ($id === null) {
         $sql = "INSERT INTO {$config['table']} (" . implode(', ', $columns) . ') VALUES ('
             . implode(', ', array_map(fn (string $column) => ":{$column}", $columns)) . ') RETURNING id';
@@ -519,22 +592,44 @@ function writeReference(string $type, ?int $id = null): never
         $sql = "UPDATE {$config['table']} SET " . implode(', ', $sets) . ' WHERE id = :id RETURNING id';
         $values['id'] = $id;
     }
-    $statement = db()->prepare($sql);
-    $statement->execute($values);
-    $savedId = $statement->fetchColumn();
-    if ($savedId === false) {
-        jsonResponse(['error' => 'Запись не найдена'], 404);
+    try {
+        $statement = $pdo->prepare($sql);
+        $statement->execute($values);
+        $savedId = $statement->fetchColumn();
+        if ($savedId === false) {
+            $pdo->rollBack();
+            jsonResponse(['error' => 'Запись не найдена'], 404);
+        }
+        $statement = $pdo->prepare("SELECT * FROM {$config['table']} WHERE id = :id");
+        $statement->execute(['id' => $savedId]);
+        $new = $statement->fetch();
+        auditEvent('reference.' . ($id === null ? 'created' : 'updated'), $user, $type, (int) $savedId, compact('old', 'new'), pdo: $pdo);
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
     }
     jsonResponse(['id' => (int) $savedId], $id === null ? 201 : 200);
 }
 
-function deleteReference(string $type, int $id): never
+function deleteReference(array $user, string $type, int $id): never
 {
-    requireCsrf();
+    requireCsrf($user);
     $config = referenceConfig($type);
+    $pdo = db();
+    $pdo->beginTransaction();
+    $statement = $pdo->prepare("SELECT * FROM {$config['table']} WHERE id = :id");
+    $statement->execute(['id' => $id]);
+    $old = $statement->fetch();
+    if (!$old) {
+        $pdo->rollBack();
+        jsonResponse(['error' => 'Запись не найдена'], 404);
+    }
     $uses = [];
     foreach ($config['dependencies'] as [$table, $column, $label]) {
-        $statement = db()->prepare("SELECT COUNT(*) FROM {$table} WHERE {$column} = :id");
+        $statement = $pdo->prepare("SELECT COUNT(*) FROM {$table} WHERE {$column} = :id");
         $statement->execute(['id' => $id]);
         $count = (int) $statement->fetchColumn();
         if ($count) {
@@ -542,12 +637,19 @@ function deleteReference(string $type, int $id): never
         }
     }
     if ($uses) {
+        $pdo->rollBack();
         jsonResponse(['error' => 'Нельзя удалить запись: она используется (' . implode(', ', $uses) . ')'], 409);
     }
-    $statement = db()->prepare("DELETE FROM {$config['table']} WHERE id = :id");
-    $statement->execute(['id' => $id]);
-    if ($statement->rowCount() === 0) {
-        jsonResponse(['error' => 'Запись не найдена'], 404);
+    try {
+        $statement = $pdo->prepare("DELETE FROM {$config['table']} WHERE id = :id");
+        $statement->execute(['id' => $id]);
+        auditEvent('reference.deleted', $user, $type, $id, ['old' => $old], pdo: $pdo);
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
     }
     jsonResponse(['ok' => true]);
 }
@@ -608,7 +710,7 @@ function actionBody(): array
 
 function writeAction(array $user, ?int $id = null): never
 {
-    requireCsrf();
+    requireCsrf($user);
     $values = actionBody();
     $posting = $values['_posting'];
     unset($values['_posting']);
@@ -616,6 +718,7 @@ function writeAction(array $user, ?int $id = null): never
         throw new InvalidArgumentException('Posting is only available for new operations');
     }
     if ($values['is_black'] && !$user['can_view_protected']) {
+        auditEvent('access.denied', $user, 'actions', $id, ['reason' => 'protected_operation']);
         jsonResponse(['error' => 'Protected operation access denied'], 403);
     }
     $pdo = db();
@@ -637,18 +740,22 @@ function writeAction(array $user, ?int $id = null): never
     }
     $values['is_debit'] = $values['is_debit'] ? 'true' : 'false';
     $values['is_black'] = $values['is_black'] ? 'true' : 'false';
+    $pdo->beginTransaction();
     if ($id === null) {
         $sql = 'INSERT INTO actions (account_id, currency_id, suboperation_id, action_date, amount, '
             . 'exchange_rate, is_debit, memo, is_black) VALUES (:account_id, :currency_id, :suboperation_id, '
             . ':action_date, :amount, :exchange_rate, :is_debit, :memo, :is_black) RETURNING id';
     } else {
-        $access = $pdo->prepare('SELECT is_black FROM actions WHERE id = :id');
+        $access = $pdo->prepare('SELECT * FROM actions WHERE id = :id');
         $access->execute(['id' => $id]);
         $action = $access->fetch();
         if (!$action) {
+            $pdo->rollBack();
             jsonResponse(['error' => 'Operation not found'], 404);
         }
         if ((bool) $action['is_black'] && !$user['can_view_protected']) {
+            $pdo->rollBack();
+            auditEvent('access.denied', $user, 'actions', $id, ['reason' => 'protected_operation']);
             jsonResponse(['error' => 'Protected operation access denied'], 403);
         }
         $sql = 'UPDATE actions SET account_id = :account_id, currency_id = :currency_id, '
@@ -657,21 +764,24 @@ function writeAction(array $user, ?int $id = null): never
             . 'WHERE id = :id RETURNING id';
         $values['id'] = $id;
     }
-    if ($posting !== null) {
-        $pdo->beginTransaction();
-    }
+    $old = $id === null ? null : $action;
     try {
         $statement = $pdo->prepare($sql);
         $statement->execute($values);
         $result = ['id' => (int) $statement->fetchColumn()];
+        $saved = $pdo->prepare('SELECT * FROM actions WHERE id = :id');
+        $saved->execute(['id' => $result['id']]);
+        auditEvent('action.' . ($id === null ? 'created' : 'updated'), $user, 'actions', $result['id'], ['old' => $old, 'new' => $saved->fetch()], pdo: $pdo);
         if ($posting !== null) {
             $values['account_id'] = $posting['account_id'];
             $values['suboperation_id'] = $posting['suboperation_id'];
             $values['is_debit'] = $values['is_debit'] === 'true' ? 'false' : 'true';
             $statement->execute($values);
             $result['posting_id'] = (int) $statement->fetchColumn();
-            $pdo->commit();
+            $saved->execute(['id' => $result['posting_id']]);
+            auditEvent('action.created', $user, 'actions', $result['posting_id'], ['old' => null, 'new' => $saved->fetch()], pdo: $pdo);
         }
+        $pdo->commit();
     } catch (Throwable $error) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
@@ -683,12 +793,28 @@ function writeAction(array $user, ?int $id = null): never
 
 function deleteAction(array $user, int $id): never
 {
-    requireCsrf();
-    $statement = db()->prepare('DELETE FROM actions WHERE id = :id'
+    requireCsrf($user);
+    $pdo = db();
+    $pdo->beginTransaction();
+    $statement = $pdo->prepare('SELECT * FROM actions WHERE id = :id'
         . ($user['can_view_protected'] ? '' : ' AND is_black = false'));
     $statement->execute(['id' => $id]);
-    if ($statement->rowCount() === 0) {
+    $old = $statement->fetch();
+    if (!$old) {
+        $pdo->rollBack();
+        auditEvent('access.denied', $user, 'actions', $id, ['reason' => 'not_found_or_protected']);
         jsonResponse(['error' => 'Operation not found or access denied'], 404);
+    }
+    try {
+        $statement = $pdo->prepare('DELETE FROM actions WHERE id = :id');
+        $statement->execute(['id' => $id]);
+        auditEvent('action.deleted', $user, 'actions', $id, ['old' => $old], pdo: $pdo);
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
     }
     jsonResponse(['ok' => true]);
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/app.php';
 
 $schema = env('LOCAL_PGSQL_SCHEMA');
+initAuth(db());
 useDataSchema($schema);
 $pdo = db();
 $passed = 0;
@@ -31,6 +32,25 @@ foreach ($required as $table => $columns) {
     $actual = $statement->fetchAll(PDO::FETCH_COLUMN);
     $check(!array_diff($columns, $actual), "Missing columns in {$table}");
 }
+
+$statement = $pdo->prepare("SELECT column_name FROM information_schema.columns WHERE table_schema = 'auth' AND table_name = 'audit_log'");
+$statement->execute();
+$auditColumns = $statement->fetchAll(PDO::FETCH_COLUMN);
+$check(!array_diff(['created_at', 'event', 'user_id', 'login', 'ip', 'data_schema', 'entity', 'entity_id', 'details'], $auditColumns), 'Missing audit log columns');
+$pdo->beginTransaction();
+auditEvent('test.event', details: ['test' => true], pdo: $pdo);
+$check($pdo->query("SELECT details->>'test' FROM auth.audit_log WHERE event = 'test.event' ORDER BY id DESC LIMIT 1")->fetchColumn() === 'true', 'Audit event is stored');
+$pdo->rollBack();
+$pdo->beginTransaction();
+auditEvent('test.event', pdo: $pdo);
+try {
+    $pdo->exec("UPDATE auth.audit_log SET event = 'changed' WHERE event = 'test.event'");
+    $appendOnly = false;
+} catch (PDOException) {
+    $appendOnly = true;
+}
+$pdo->rollBack();
+$check($appendOnly, 'Audit log is append-only');
 
 $index = $pdo->prepare("SELECT COUNT(*) FROM pg_indexes WHERE schemaname = :schema AND tablename = 'actions' AND indexdef ILIKE '%is_debit%' AND indexdef ILIKE '%action_date%' AND indexdef ILIKE '%id%'");
 $index->execute(['schema' => $schema]);

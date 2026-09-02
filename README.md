@@ -27,6 +27,13 @@ Remove-Item Env:NEW_USER_PASSWORD
 .\bin\add-local-user.ps1 new_user vl 1
 ```
 
+События входа, отказа доступа и изменения данных записываются в
+`auth.audit_log`. Для удаления записей старше 180 дней:
+
+```powershell
+.\.tools\php\php.exe bin\prune-audit-log.php 180
+```
+
 Приложение читает подключение к PostgreSQL из `.env`. Для повторного импорта
 данных из MSSQL:
 
@@ -78,6 +85,9 @@ npm run test:load
 ```powershell
 .\bin\deploy-hosting.ps1
 ```
+
+Перед загрузкой файлов скрипт автоматически инициализирует и обновляет объекты
+схемы `auth` в PostgreSQL хостинга, включая таблицу журнала аудита.
 
 Скрипт намеренно не передаёт `.env` по незашифрованному FTP. Создайте `.env`
 уровнем выше `public_html` через SSH или защищённый файловый менеджер, используя

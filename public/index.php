@@ -33,7 +33,7 @@ try {
             me($user);
         }
         if ($path === '/api/logout') {
-            logout();
+            logout($user);
         }
         useDataSchema($user['data_schema']);
         if ($path === '/api/actions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -49,14 +49,14 @@ try {
         if (preg_match('#^/api/references/([a-z0-9_]+)$#', $path, $match)) {
             match ($_SERVER['REQUEST_METHOD']) {
                 'GET' => references($match[1]),
-                'POST' => writeReference($match[1]),
+                'POST' => writeReference($user, $match[1]),
                 default => jsonResponse(['error' => 'Method not allowed'], 405),
             };
         }
         if (preg_match('#^/api/references/([a-z0-9_]+)/([1-9][0-9]*)$#', $path, $match)) {
             match ($_SERVER['REQUEST_METHOD']) {
-                'PUT' => writeReference($match[1], (int) $match[2]),
-                'DELETE' => deleteReference($match[1], (int) $match[2]),
+                'PUT' => writeReference($user, $match[1], (int) $match[2]),
+                'DELETE' => deleteReference($user, $match[1], (int) $match[2]),
                 default => jsonResponse(['error' => 'Method not allowed'], 405),
             };
         }
