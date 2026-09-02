@@ -7,11 +7,10 @@ header('Cache-Control: no-store');
 
 try {
     require dirname(__DIR__) . '/src/app.php';
-    $database = db()->query('SELECT current_database()')->fetchColumn();
+    db()->query('SELECT 1')->fetchColumn();
     echo json_encode([
         'ok' => true,
         'pdo_pgsql' => extension_loaded('pdo_pgsql'),
-        'database' => $database,
     ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (Throwable $error) {
     http_response_code(500);
