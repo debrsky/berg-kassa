@@ -551,6 +551,18 @@ function actionBody(): array
     if ($isDebit === null || $isBlack === null) {
         throw new InvalidArgumentException('Invalid boolean field');
     }
+    $posting = $body['posting'] ?? null;
+    if ($posting !== null) {
+        if (!is_array($posting)) {
+            throw new InvalidArgumentException('Invalid field: posting');
+        }
+        foreach (['account_id', 'suboperation_id'] as $name) {
+            if (!isset($posting[$name]) || !ctype_digit((string) $posting[$name]) || (int) $posting[$name] < 1) {
+                throw new InvalidArgumentException("Invalid posting field: {$name}");
+            }
+            $posting[$name] = (int) $posting[$name];
+        }
+    }
     return [
         'account_id' => $body['account_id'],
         'currency_id' => $body['currency_id'],
@@ -561,6 +573,7 @@ function actionBody(): array
         'is_debit' => $isDebit,
         'memo' => trim((string) ($body['memo'] ?? '')) ?: null,
         'is_black' => $isBlack,
+        '_posting' => $posting,
     ];
 }
 
@@ -568,6 +581,11 @@ function writeAction(array $user, ?int $id = null): never
 {
     requireCsrf();
     $values = actionBody();
+    $posting = $values['_posting'];
+    unset($values['_posting']);
+    if ($id !== null && $posting !== null) {
+        throw new InvalidArgumentException('Posting is only available for new operations');
+    }
     if ($values['is_black'] && !$user['can_view_protected']) {
         jsonResponse(['error' => 'Protected operation access denied'], 403);
     }
@@ -577,6 +595,15 @@ function writeAction(array $user, ?int $id = null): never
         $statement->execute(['id' => $values[$field]]);
         if (!$statement->fetchColumn()) {
             throw new InvalidArgumentException("Unknown field value: {$field}");
+        }
+    }
+    if ($posting !== null) {
+        foreach (['accounts' => 'account_id', 'suboperations_l2' => 'suboperation_id'] as $table => $field) {
+            $statement = $pdo->prepare("SELECT 1 FROM {$table} WHERE id = :id");
+            $statement->execute(['id' => $posting[$field]]);
+            if (!$statement->fetchColumn()) {
+                throw new InvalidArgumentException("Unknown posting field value: {$field}");
+            }
         }
     }
     $values['is_debit'] = $values['is_debit'] ? 'true' : 'false';
@@ -601,9 +628,28 @@ function writeAction(array $user, ?int $id = null): never
             . 'WHERE id = :id RETURNING id';
         $values['id'] = $id;
     }
-    $statement = $pdo->prepare($sql);
-    $statement->execute($values);
-    jsonResponse(['id' => (int) $statement->fetchColumn()], $id === null ? 201 : 200);
+    if ($posting !== null) {
+        $pdo->beginTransaction();
+    }
+    try {
+        $statement = $pdo->prepare($sql);
+        $statement->execute($values);
+        $result = ['id' => (int) $statement->fetchColumn()];
+        if ($posting !== null) {
+            $values['account_id'] = $posting['account_id'];
+            $values['suboperation_id'] = $posting['suboperation_id'];
+            $values['is_debit'] = $values['is_debit'] === 'true' ? 'false' : 'true';
+            $statement->execute($values);
+            $result['posting_id'] = (int) $statement->fetchColumn();
+            $pdo->commit();
+        }
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
+    }
+    jsonResponse($result, $id === null ? 201 : 200);
 }
 
 function deleteAction(array $user, int $id): never

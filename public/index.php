@@ -111,7 +111,7 @@ try {
             </label>
             <label class="login-card__field">
                 <span class="login-card__label">Пароль</span>
-                <input class="login-card__control" type="password" name="password" autocomplete="current-password" required>
+                <input class="login-card__control" type="password" name="password" autocomplete="off" required>
             </label>
             <p class="login-card__error" id="login-error" role="alert"></p>
             <button class="login-card__submit" type="submit">Войти</button>
@@ -355,13 +355,19 @@ try {
                 <span>Дата и время</span>
                 <input type="datetime-local" name="action_date" required>
             </label>
+            <div class="operation-form__currency">
+                <label class="operation-form__field">
+                    <span>Валюта</span>
+                    <select name="currency_id" required></select>
+                </label>
+                <label class="operation-form__field">
+                    <span>Курс</span>
+                    <input type="number" name="exchange_rate" min="0.0001" step="0.0001">
+                </label>
+            </div>
             <label class="operation-form__field">
                 <span>Счёт</span>
                 <select name="account_id" required></select>
-            </label>
-            <label class="operation-form__field">
-                <span>Валюта</span>
-                <select name="currency_id" required></select>
             </label>
             <label class="operation-form__field">
                 <span>Направление</span>
@@ -383,10 +389,6 @@ try {
                 <span>Сумма</span>
                 <input type="number" name="amount" min="0.01" step="0.01" required>
             </label>
-            <label class="operation-form__field">
-                <span>Курс</span>
-                <input type="number" name="exchange_rate" min="0.0001" step="0.0001">
-            </label>
             <label class="operation-form__field operation-form__field--wide">
                 <span>Примечание</span>
                 <textarea name="memo" rows="3"></textarea>
@@ -394,6 +396,19 @@ try {
             <label class="operation-form__protected" id="operation-protected-field">
                 <input type="checkbox" name="is_black"> Защищённая операция
             </label>
+            <details class="operation-form__posting" id="operation-posting">
+                <summary class="operation-form__posting-title">Выполнить проводку</summary>
+                <div class="operation-form__posting-fields">
+                    <label class="operation-form__field">
+                        <span>Счёт</span>
+                        <select name="posting_account_id"></select>
+                    </label>
+                    <label class="operation-form__field">
+                        <span>Подоперация 2</span>
+                        <select name="posting_suboperation_id"></select>
+                    </label>
+                </div>
+            </details>
         </div>
         <p class="operation-form__error" id="operation-form-error" role="alert"></p>
         <footer class="operation-form__actions">

@@ -403,15 +403,20 @@ function openOperation(item = null, isDebit = true) {
         : localDateTime();
     operationForm.elements.is_debit.value = String(item?.is_debit ?? isDebit);
     operationForm.elements.amount.value = item?.amount ?? '';
-    operationForm.elements.exchange_rate.value = item?.exchange_rate ?? '';
     operationForm.elements.memo.value = item?.memo ?? '';
-    operationForm.elements.is_black.checked = Boolean(item?.is_black);
+    operationForm.elements.is_black.checked = item ? Boolean(item.is_black) : form.elements.include_protected.checked;
     operationForm.elements.account_id.replaceChildren(new Option('Выберите', ''));
     operationForm.elements.currency_id.replaceChildren(new Option('Выберите', ''));
+    operationForm.elements.posting_account_id.replaceChildren(new Option('Выберите', ''));
     for (const record of lookups.accounts) operationForm.elements.account_id.add(new Option(record.name || `ID: ${record.id}`, record.id));
     for (const record of lookups.currencies) operationForm.elements.currency_id.add(new Option(record.name || `ID: ${record.id}`, record.id));
-    operationForm.elements.account_id.value = item?.account_id ?? '';
-    operationForm.elements.currency_id.value = item?.currency_id ?? '';
+    for (const record of lookups.accounts) operationForm.elements.posting_account_id.add(new Option(record.name || `ID: ${record.id}`, record.id));
+    operationForm.elements.account_id.value = item?.account_id ?? form.elements.account_id.value;
+    const currencyId = item?.currency_id ?? form.elements.currency_id.value;
+    const currency = lookups.currencies.find(record => String(record.id) === String(currencyId))
+        ?? (!item && lookups.currencies.find(record => record.name === 'р.'));
+    operationForm.elements.currency_id.value = currency?.id ?? '';
+    operationForm.elements.exchange_rate.value = item?.exchange_rate ?? currency?.default_rate ?? '';
     refreshEditorCascade();
     if (item) {
         const sub2 = lookups.suboperations_l2.find(record => String(record.id) === String(item.suboperation_id));
@@ -424,7 +429,22 @@ function openOperation(item = null, isDebit = true) {
         operationForm.elements.suboperation_l1_id.value = sub2?.suboperation_l1_id ?? '';
         refreshEditorCascade('suboperation_id');
         operationForm.elements.suboperation_id.value = item.suboperation_id;
+    } else {
+        for (const [filterName, fieldName, next] of [
+            ['direction_id', 'direction_id', 'action_type_id'],
+            ['action_type_id', 'action_type_id', 'suboperation_l1_id'],
+            ['suboperation_l1_id', 'suboperation_l1_id', 'suboperation_id'],
+            ['suboperation_l2_id', 'suboperation_id'],
+        ]) {
+            if (form.elements[filterName].value) operationForm.elements[fieldName].value = form.elements[filterName].value;
+            if (next) refreshEditorCascade(next);
+        }
     }
+    editorOptions('posting_suboperation_id', 'suboperations_l2', 'suboperation_l1_id', 'suboperation_l1_id');
+    document.querySelector('#operation-posting').hidden = Boolean(item);
+    document.querySelector('#operation-posting').open = false;
+    operationForm.elements.posting_account_id.required = false;
+    operationForm.elements.posting_suboperation_id.required = false;
     document.querySelector('#operation-form-title').textContent = item ? 'Редактирование операции' : 'Новая операция';
     document.querySelector('#delete-operation').hidden = !item;
     document.querySelector('#operation-form-error').textContent = '';
@@ -435,12 +455,18 @@ for (const name of ['direction_id', 'action_type_id', 'suboperation_l1_id']) {
     operationForm.elements[name].addEventListener('change', () => {
         const next = { direction_id: 'action_type_id', action_type_id: 'suboperation_l1_id', suboperation_l1_id: 'suboperation_id' }[name];
         refreshEditorCascade(next);
+        editorOptions('posting_suboperation_id', 'suboperations_l2', 'suboperation_l1_id', 'suboperation_l1_id');
     });
 }
 
 operationForm.elements.currency_id.addEventListener('change', event => {
     const currency = lookups.currencies.find(item => String(item.id) === event.target.value);
     operationForm.elements.exchange_rate.value = currency?.default_rate ?? '';
+});
+
+document.querySelector('#operation-posting').addEventListener('toggle', event => {
+    operationForm.elements.posting_account_id.required = event.target.open;
+    operationForm.elements.posting_suboperation_id.required = event.target.open;
 });
 
 for (const button of document.querySelectorAll('[data-add-flow]')) {
@@ -456,6 +482,14 @@ operationForm.addEventListener('submit', async event => {
     const data = Object.fromEntries(new FormData(operationForm));
     data.is_debit = data.is_debit === 'true';
     data.is_black = operationForm.elements.is_black.checked;
+    if (document.querySelector('#operation-posting').open) {
+        data.posting = {
+            account_id: data.posting_account_id,
+            suboperation_id: data.posting_suboperation_id,
+        };
+    }
+    delete data.posting_account_id;
+    delete data.posting_suboperation_id;
     const id = data.id;
     delete data.id;
     submit.disabled = true;

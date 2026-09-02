@@ -91,22 +91,51 @@ test('CRUD операции очищает созданные данные', asy
     const suboperation = lookups.suboperations_l2.find(item => !item.is_placeholder) || lookups.suboperations_l2[0];
     test.skip(!account || !currency || !suboperation, 'Недостаточно справочных данных');
     let id;
+    let postingId;
     try {
         const body = {
             account_id: account.id, currency_id: currency.id, suboperation_id: suboperation.id,
             action_date: '2026-01-15T12:00', amount: '123.45', exchange_rate: '1',
             is_debit: true, is_black: false, memo: `E2E ${Date.now()}`,
         };
-        let response = await request.post('/api/actions', { headers: { 'X-CSRF-Token': csrf }, data: body });
+        let response = await request.post('/api/actions', {
+            headers: { 'X-CSRF-Token': csrf },
+            data: { ...body, posting: { account_id: account.id, suboperation_id: suboperation.id } },
+        });
         expect(response.status()).toBe(201);
-        id = (await response.json()).id;
+        ({ id, posting_id: postingId } = await response.json());
+        expect(postingId).toBeTruthy();
+        const expenses = await (await request.get(`/api/actions?flow=expense&from_date=2026-01-15&to_date=2026-01-15&account_id=${account.id}&limit=200`)).json();
+        expect(expenses.items.some(item => item.id === postingId)).toBeTruthy();
         response = await request.put(`/api/actions/${id}`, {
             headers: { 'X-CSRF-Token': csrf }, data: { ...body, amount: '234.56', memo: `${body.memo} edited` },
         });
         expect(response.ok()).toBeTruthy();
     } finally {
         if (id) expect((await request.delete(`/api/actions/${id}`, { headers: { 'X-CSRF-Token': csrf } })).ok()).toBeTruthy();
+        if (postingId) expect((await request.delete(`/api/actions/${postingId}`, { headers: { 'X-CSRF-Token': csrf } })).ok()).toBeTruthy();
     }
+});
+
+test('ошибка проводки не сохраняет основную операцию', async ({ request }) => {
+    const lookups = await (await request.get('/api/lookups')).json();
+    const account = lookups.accounts[0];
+    const currency = lookups.currencies[0];
+    const suboperation = lookups.suboperations_l2[0];
+    test.skip(!account || !currency || !suboperation, 'Недостаточно справочных данных');
+    const summaryUrl = '/api/action-summary?from_date=2040-01-15&to_date=2040-01-15';
+    const before = (await (await request.get(summaryUrl)).json()).operation_count;
+    const response = await request.post('/api/actions', {
+        headers: { 'X-CSRF-Token': csrf },
+        data: {
+            account_id: account.id, currency_id: currency.id, suboperation_id: suboperation.id,
+            action_date: '2040-01-15T12:00', amount: '123.45', exchange_rate: '1',
+            is_debit: true, is_black: false,
+            posting: { account_id: '2147483647', suboperation_id: suboperation.id },
+        },
+    });
+    expect(response.status()).toBe(400);
+    expect((await (await request.get(summaryUrl)).json()).operation_count).toBe(before);
 });
 
 test('явная проверка блокирует удаление используемого счёта', async ({ request }) => {
