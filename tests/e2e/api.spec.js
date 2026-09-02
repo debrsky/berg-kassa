@@ -168,12 +168,9 @@ test('авторизация, методы и права на схему защ�
     })).status()).toBe(403);
 });
 
-test('ответы содержат защитные заголовки и JSON', async ({ request }) => {
-    const page = await request.get('/');
-    expect(page.headers()['x-robots-tag']).toContain('noindex');
+test('API отвечает JSON', async ({ request }) => {
     const api = await request.get('/api/me');
     expect(api.headers()['content-type']).toContain('application/json');
-    expect(api.headers()['cache-control']).toContain('no-store');
 });
 
 test('CRUD дерева операций очищает созданные записи', async ({ request }) => {

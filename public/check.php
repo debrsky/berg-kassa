@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store');
+// Cache-Control is set globally in .htaccess.
 
 try {
     require dirname(__DIR__) . '/src/app.php';

@@ -94,6 +94,7 @@ function startAppSession(): void
 {
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
+    session_cache_limiter('');
     session_name('berg_kassa_session');
     $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
     $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
@@ -284,7 +285,7 @@ function jsonResponse(mixed $data, int $status = 200): never
 {
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
-    header('Cache-Control: no-store');
+    // Cache-Control is set globally in public/.htaccess.
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     exit;
 }

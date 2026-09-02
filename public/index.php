@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/app.php';
 
-header('X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex');
+// X-Robots-Tag is set globally in .htaccess.
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $isLoginPage = $path === '/login';
