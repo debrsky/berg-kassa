@@ -173,6 +173,27 @@ test('API отвечает JSON', async ({ request }) => {
     expect(api.headers()['content-type']).toContain('application/json');
 });
 
+test('журнал аудита доступен только с правом защищённых операций', async ({ request }) => {
+    const me = await (await request.get('/api/me')).json();
+    const response = await request.get('/api/audit-log?limit=5');
+    if (!me.can_view_protected) {
+        expect(response.status()).toBe(403);
+        return;
+    }
+    expect(response.ok()).toBeTruthy();
+    const data = await response.json();
+    expect(Array.isArray(data.items)).toBeTruthy();
+    expect(Array.isArray(data.events)).toBeTruthy();
+    expect(data.items.length).toBeLessThanOrEqual(5);
+    expect(Number.isInteger(data.total)).toBeTruthy();
+    expect((await request.get('/api/audit-log?limit=101')).status()).toBe(400);
+    expect((await request.get('/api/audit-log?event=bad%20event')).status()).toBe(400);
+    if (data.events.length) {
+        const filtered = await (await request.get(`/api/audit-log?event=${encodeURIComponent(data.events[0])}&from_date=2020-01-01&to_date=2099-12-31&limit=5`)).json();
+        expect(filtered.items.every(item => item.event === data.events[0])).toBeTruthy();
+    }
+});
+
 test('CRUD дерева операций очищает созданные записи', async ({ request }) => {
     const marker = `E2E tree ${Date.now()}`;
     const created = [];

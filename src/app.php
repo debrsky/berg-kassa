@@ -346,6 +346,62 @@ function me(array $user): never
     ]);
 }
 
+function auditLog(array $user): never
+{
+    if (!$user['can_view_protected']) {
+        auditEvent('access.denied', $user, details: ['reason' => 'audit_access_denied']);
+        jsonResponse(['error' => 'Audit log access denied'], 403);
+    }
+    $offset = (string) ($_GET['offset'] ?? '0');
+    $limit = (string) ($_GET['limit'] ?? '50');
+    if (!ctype_digit($offset) || !ctype_digit($limit) || (int) $limit < 1 || (int) $limit > 100) {
+        throw new InvalidArgumentException('Invalid offset or limit');
+    }
+    $where = [];
+    $params = [];
+    $event = trim((string) ($_GET['event'] ?? ''));
+    if ($event !== '') {
+        if (!preg_match('/^[a-z.]+$/', $event)) {
+            throw new InvalidArgumentException('Invalid event');
+        }
+        $where[] = 'event = :event';
+        $params['event'] = $event;
+    }
+    $login = trim((string) ($_GET['login'] ?? ''));
+    if (strlen($login) > 100) {
+        throw new InvalidArgumentException('Invalid login');
+    }
+    if ($login !== '') {
+        $where[] = 'login ILIKE :login';
+        $params['login'] = '%' . $login . '%';
+    }
+    foreach (['from_date' => '>=', 'to_date' => '<'] as $name => $operator) {
+        if (($_GET[$name] ?? '') === '') {
+            continue;
+        }
+        $date = dateParameter($name, '');
+        $where[] = 'created_at ' . $operator . ' :' . $name . "::date" . ($name === 'to_date' ? " + INTERVAL '1 day'" : '');
+        $params[$name] = $date;
+    }
+    $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+    $pdo = db();
+    $statement = $pdo->prepare('SELECT COUNT(*) FROM auth.audit_log' . $whereSql);
+    $statement->execute($params);
+    $total = (int) $statement->fetchColumn();
+    $statement = $pdo->prepare('SELECT id, created_at, event, user_id, login, host(ip) AS ip, data_schema, entity, entity_id, details '
+        . 'FROM auth.audit_log' . $whereSql . ' ORDER BY id DESC LIMIT ' . (int) $limit . ' OFFSET ' . (int) $offset);
+    $statement->execute($params);
+    $items = $statement->fetchAll();
+    foreach ($items as &$item) {
+        $item['details'] = json_decode($item['details'], true, flags: JSON_THROW_ON_ERROR);
+    }
+    jsonResponse([
+        'items' => $items,
+        'total' => $total,
+        'events' => $pdo->query('SELECT DISTINCT event FROM auth.audit_log ORDER BY event')->fetchAll(PDO::FETCH_COLUMN),
+    ]);
+}
+
 function jsonResponse(mixed $data, int $status = 200): never
 {
     http_response_code($status);

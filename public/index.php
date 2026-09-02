@@ -9,6 +9,7 @@ require dirname(__DIR__) . '/src/app.php';
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $isLoginPage = $path === '/login';
 $isReferencesPage = $path === '/references';
+$isAuditPage = $path === '/audit';
 
 try {
     if ($path === '/api/login') {
@@ -19,10 +20,15 @@ try {
             header('Location: /');
             exit;
         }
-    } elseif ($path === '/' || $isReferencesPage) {
-        if (!currentUser()) {
+    } elseif ($path === '/' || $isReferencesPage || $isAuditPage) {
+        $pageUser = currentUser();
+        if (!$pageUser) {
             header('Location: /login');
             exit;
+        }
+        if ($isAuditPage && !$pageUser['can_view_protected']) {
+            auditEvent('access.denied', $pageUser, details: ['reason' => 'audit_access_denied']);
+            jsonResponse(['error' => 'Audit log access denied'], 403);
         }
     } elseif (str_starts_with($path, '/api/')) {
         $user = requireUser();
@@ -34,6 +40,9 @@ try {
         }
         if ($path === '/api/logout') {
             logout($user);
+        }
+        if ($path === '/api/audit-log') {
+            auditLog($user);
         }
         useDataSchema($user['data_schema']);
         if ($path === '/api/actions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -92,7 +101,7 @@ try {
     <meta name="description" content="Просмотр приходных и расходных операций кассы">
     <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'system';</script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <title><?= $isLoginPage ? 'Вход — Касса' : ($isReferencesPage ? 'Справочники — Касса' : 'Касса — операции') ?></title>
+    <title><?= $isLoginPage ? 'Вход — Касса' : ($isReferencesPage ? 'Справочники — Касса' : ($isAuditPage ? 'Журнал аудита — Касса' : 'Касса — операции')) ?></title>
     <link rel="stylesheet" href="/css/design-system.css?v=<?= filemtime(__DIR__ . '/css/design-system.css') ?>">
     <link rel="stylesheet" href="/css/app.css?v=<?= filemtime(__DIR__ . '/css/app.css') ?>">
 </head>
@@ -119,6 +128,44 @@ try {
     </section>
 </main>
 <script src="/js/login.js?v=<?= filemtime(__DIR__ . '/js/login.js') ?>" defer></script>
+<?php elseif ($isAuditPage): ?>
+<main class="audit-page">
+    <header class="dashboard__header">
+        <div>
+            <p class="dashboard__eyebrow">Безопасность</p>
+            <h1 class="dashboard__title">Журнал аудита</h1>
+        </div>
+        <div class="dashboard__session">
+            <button class="theme-toggle" id="theme-toggle" type="button">Тема: Системная</button>
+            <span class="dashboard__user" id="current-user"></span>
+            <button class="dashboard__logout" type="button" id="logout">Выйти</button>
+            <a class="dashboard__link" href="/">← Операции</a>
+            <p class="dashboard__status" id="status">Загрузка…</p>
+        </div>
+    </header>
+    <form class="audit-filter" id="audit-filter">
+        <label><span>Начало периода</span><input type="date" name="from_date"></label>
+        <label><span>Конец периода</span><input type="date" name="to_date"></label>
+        <label><span>Событие</span><select name="event"><option value="">Все события</option></select></label>
+        <label><span>Логин</span><input name="login" maxlength="100" autocomplete="off"></label>
+        <button type="submit">Применить</button>
+        <button type="button" id="audit-reset">Сбросить</button>
+    </form>
+    <section class="audit-log" aria-live="polite">
+        <div class="audit-log__scroll">
+            <table>
+                <thead><tr><th>Дата</th><th>Событие</th><th>Пользователь</th><th>IP</th><th>Схема</th><th>Объект</th><th>Детали</th></tr></thead>
+                <tbody id="audit-rows"></tbody>
+            </table>
+        </div>
+        <footer class="audit-log__pagination">
+            <button type="button" id="audit-prev">← Назад</button>
+            <span id="audit-page-info"></span>
+            <button type="button" id="audit-next">Вперёд →</button>
+        </footer>
+    </section>
+</main>
+<script src="/js/audit.js?v=<?= filemtime(__DIR__ . '/js/audit.js') ?>" defer></script>
 <?php elseif ($isReferencesPage): ?>
 <main class="reference-page">
     <header class="dashboard__header">
@@ -134,6 +181,7 @@ try {
                 <select class="dashboard__schema" id="data-schema" aria-label="Схема данных"></select>
             </label>
             <a class="dashboard__link" href="/">← Операции</a>
+            <a class="dashboard__link" id="audit-link" href="/audit" hidden>Журнал аудита</a>
             <p class="dashboard__status" id="status">Загрузка…</p>
         </div>
     </header>
@@ -227,6 +275,7 @@ try {
             </label>
             <button class="dashboard__logout" type="button" id="logout">Выйти</button>
             <a class="dashboard__link" href="/references">Справочники</a>
+            <a class="dashboard__link" id="audit-link" href="/audit" hidden>Журнал аудита</a>
             <p class="dashboard__status" id="status">Загрузка…</p>
         </div>
     </header>

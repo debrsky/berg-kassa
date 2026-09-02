@@ -47,6 +47,19 @@ test('основная страница и форма добавления ра�
     await page.getByRole('button', { name: 'Закрыть' }).click();
 });
 
+test('ссылка на журнал соответствует праву и журнал открывается', async ({ page }) => {
+    const me = await (await page.request.get('/api/me')).json();
+    const link = page.locator('#audit-link');
+    if (!me.can_view_protected) {
+        await expect(link).toBeHidden();
+        return;
+    }
+    await expect(link).toBeVisible();
+    await link.click();
+    await expect(page.getByRole('heading', { name: 'Журнал аудита' })).toBeVisible();
+    await expect(page.locator('#audit-rows tr')).not.toHaveCount(0);
+});
+
 test('дата открывает редактор существующей операции', async ({ page }) => {
     const dateButton = page.getByRole('button', { name: /Редактировать операцию от/ }).first();
     await expect(dateButton).toBeVisible();
