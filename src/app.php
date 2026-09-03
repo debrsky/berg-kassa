@@ -603,10 +603,10 @@ function lookups(): never
             ) AS default_rate
             FROM currencies c ORDER BY c.name NULLS LAST, c.id
         SQL,
-        'directions' => 'SELECT id, name, is_placeholder FROM directions ORDER BY name NULLS LAST, id',
-        'action_types' => 'SELECT id, direction_id, name, is_placeholder FROM action_types ORDER BY name NULLS LAST, id',
-        'suboperations_l1' => 'SELECT id, action_type_id, name, is_placeholder FROM suboperations_l1 ORDER BY name NULLS LAST, id',
-        'suboperations_l2' => 'SELECT id, suboperation_l1_id, name, is_placeholder FROM suboperations_l2 ORDER BY name NULLS LAST, id',
+        'directions' => 'SELECT id, name, memo, is_placeholder FROM directions ORDER BY name NULLS LAST, id',
+        'action_types' => 'SELECT id, direction_id, name, memo, is_placeholder FROM action_types ORDER BY name NULLS LAST, id',
+        'suboperations_l1' => 'SELECT id, action_type_id, name, memo, is_placeholder FROM suboperations_l1 ORDER BY name NULLS LAST, id',
+        'suboperations_l2' => 'SELECT id, suboperation_l1_id, name, memo, is_placeholder FROM suboperations_l2 ORDER BY name NULLS LAST, id',
     ];
     $result = [];
     foreach ($queries as $name => $sql) {

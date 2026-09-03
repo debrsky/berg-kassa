@@ -231,11 +231,13 @@ test('CRUD дерева операций очищает созданные за�
         const direction = await create('directions', { name: marker, memo: '' });
         const action = await create('action_types', { direction_id: direction, name: marker, memo: '' });
         const sub1 = await create('suboperations_l1', { action_type_id: action, name: marker, memo: '' });
-        const sub2 = await create('suboperations_l2', { suboperation_l1_id: sub1, name: marker, memo: '' });
+        const sub2 = await create('suboperations_l2', { suboperation_l1_id: sub1, name: marker, memo: 'created memo' });
         const response = await request.put(`/api/references/suboperations_l2/${sub2}`, {
-            headers: { 'X-CSRF-Token': csrf }, data: { suboperation_l1_id: sub1, name: `${marker} edited`, memo: '' },
+            headers: { 'X-CSRF-Token': csrf }, data: { suboperation_l1_id: sub1, name: `${marker} edited`, memo: 'updated memo' },
         });
         expect(response.ok()).toBeTruthy();
+        const lookups = await (await request.get('/api/lookups')).json();
+        expect(lookups.suboperations_l2.find(item => item.id === sub2)?.memo).toBe('updated memo');
     } finally {
         for (const [type, id] of created.reverse()) {
             expect((await request.delete(`/api/references/${type}/${id}`, { headers: { 'X-CSRF-Token': csrf } })).ok()).toBeTruthy();

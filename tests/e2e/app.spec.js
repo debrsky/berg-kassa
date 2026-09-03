@@ -156,5 +156,15 @@ test('связанные справочники и поиск работают',
     await operations.selectOption({ index: 0 });
     await page.getByLabel('Редактировать операцию').click();
     await expect(page.getByLabel('Название')).toBeVisible();
+
+    const sub2 = page.getByLabel('Подоперации 2', { exact: true });
+    if (await sub2.locator('option').count()) {
+        await sub2.selectOption({ index: 0 });
+        const sub2Id = await sub2.inputValue();
+        await page.getByLabel('Редактировать подоперацию 2').click();
+        const selected = await (await page.request.get('/api/lookups')).json();
+        const record = selected.suboperations_l2.find(item => String(item.id) === sub2Id);
+        await expect(page.getByLabel('Примечание')).toHaveValue(record?.memo || '');
+    }
 });
 });
