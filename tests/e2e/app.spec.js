@@ -37,6 +37,8 @@ test.beforeEach(async ({ page }) => {
     await page.getByLabel('Пароль').fill(password);
     await page.getByRole('button', { name: 'Войти' }).click();
     await expect(page).not.toHaveURL(/\/login$/);
+    await page.waitForLoadState('load');
+    await expect(page.locator('#status')).toContainText('Найдено');
 });
 
 test('основная страница и форма добавления работают', async ({ page }) => {
