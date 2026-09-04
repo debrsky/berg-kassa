@@ -24,178 +24,6 @@ let memoTimer;
 let appliedFilters = new URLSearchParams();
 let currentUser;
 
-class VirtualList {
-    constructor(panel) {
-        this.panel = panel;
-        this.flow = panel.dataset.flow;
-        this.viewport = panel.querySelector('[data-list]');
-        this.canvas = panel.querySelector('[data-canvas]');
-        this.columnsViewport = panel.querySelector('[data-columns-scroll]');
-        this.count = panel.querySelector('[data-count]');
-        this.viewport.addEventListener('scroll', () => this.onScroll());
-        new ResizeObserver(() => this.render()).observe(this.viewport);
-        this.pages = new Map();
-        this.pending = new Map();
-        this.total = null;
-        this.canvas.replaceChildren(this.message('Выберите доступную схему'));
-    }
-
-    reset() {
-        clearTimeout(this.scrollTimer);
-        for (const pending of this.pending.values()) pending.controller.abort();
-        this.pages.clear();
-        this.pending.clear();
-        this.total = null;
-        this.version = requestVersion;
-        this.viewport.scrollTop = 0;
-        this.canvas.style.height = '';
-        this.canvas.replaceChildren(this.message('Загрузка операций…'));
-        this.count.textContent = '0';
-        this.loadPage(0);
-    }
-
-    loadPage(page) {
-        if (this.pages.has(page) || this.pending.has(page)) return;
-        const version = this.version;
-        const controller = new AbortController();
-        let request;
-        request = (async () => {
-            const params = new URLSearchParams(appliedFilters);
-            params.set('flow', this.flow);
-            params.set('offset', page * PAGE_SIZE);
-            params.set('limit', PAGE_SIZE);
-            if (this.total === null) params.set('include_total', '1');
-            const response = await fetchJson(`/api/actions?${params}`, { signal: controller.signal });
-            if (version !== requestVersion) return;
-            if (response.total !== null) {
-                this.total = Number(response.total);
-                this.count.textContent = this.total.toLocaleString('ru-RU');
-                this.canvas.style.height = `${this.total * ROW_HEIGHT}px`;
-            }
-            this.pages.set(page, response.items);
-            while (this.pages.size > MAX_CACHED_PAGES) this.pages.delete(this.pages.keys().next().value);
-            this.render();
-        })().catch(error => {
-            if (error.name === 'AbortError') return;
-            if (version !== requestVersion) return;
-            this.canvas.replaceChildren(this.message(error.message, true));
-        }).finally(() => {
-            if (this.pending.get(page)?.request === request) this.pending.delete(page);
-        });
-        this.pending.set(page, { request, controller });
-    }
-
-    onScroll() {
-        if (notePopover.matches(':popover-open')) notePopover.hidePopover();
-        this.syncColumns();
-        clearTimeout(this.scrollTimer);
-        this.scrollTimer = setTimeout(() => this.render(), 120);
-    }
-
-    syncColumns() {
-        this.columnsViewport.style.marginRight = `${this.viewport.offsetWidth - this.viewport.clientWidth}px`;
-        this.columnsViewport.scrollLeft = this.viewport.scrollLeft;
-    }
-
-    render() {
-        if (this.total === null) {
-            this.loadPage(0);
-            return;
-        }
-        if (this.total === 0) {
-            this.canvas.replaceChildren(this.message('Операций не найдено'));
-            return;
-        }
-        const start = Math.max(0, Math.floor(this.viewport.scrollTop / ROW_HEIGHT) - BUFFER);
-        const visible = Math.ceil(this.viewport.clientHeight / ROW_HEIGHT) + BUFFER * 2;
-        const end = Math.min(this.total, start + visible);
-        const firstPage = Math.floor(start / PAGE_SIZE);
-        const lastPage = Math.floor((end - 1) / PAGE_SIZE);
-        for (const [page, pending] of this.pending) {
-            if (page < firstPage || page > lastPage) pending.controller.abort();
-        }
-        for (let page = firstPage; page <= lastPage; page++) this.loadPage(page);
-        const fragment = document.createDocumentFragment();
-        for (let index = start; index < end; index++) {
-            const page = Math.floor(index / PAGE_SIZE);
-            const items = this.pages.get(page);
-            if (items) {
-                this.pages.delete(page);
-                this.pages.set(page, items);
-                const item = items[index % PAGE_SIZE];
-                if (item) fragment.append(this.row(item, index));
-            }
-        }
-        if (!fragment.childNodes.length) fragment.append(this.message('Загрузка…', false, start));
-        this.canvas.replaceChildren(fragment);
-        this.syncColumns();
-        this.enhanceNotes();
-    }
-
-    enhanceNotes() {
-        for (const note of this.canvas.querySelectorAll('.operation-row__note')) {
-            if (note.scrollWidth <= note.clientWidth) continue;
-            note.classList.add('operation-row__note--truncated');
-            note.tabIndex = 0;
-            note.setAttribute('role', 'button');
-            note.setAttribute('aria-label', 'Показать полное примечание');
-            const open = () => showNote(note, note.fullText);
-            note.addEventListener('click', event => {
-                event.stopPropagation();
-                open();
-            });
-            note.addEventListener('keydown', event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    open();
-                }
-            });
-        }
-    }
-
-    row(item, index) {
-        const row = document.createElement('article');
-        row.className = 'operation-row' + (item.is_black ? ' operation-row--protected' : '');
-        row.dataset.operationId = item.id;
-        row.style.transform = `translateY(${index * ROW_HEIGHT}px)`;
-        const operation = [item.direction, item.action_type].filter(Boolean).join(' · ') || 'Без направления';
-        const suboperation = item.suboperation_placeholder
-            ? `Неизвестно (ID: ${item.suboperation_id})`
-            : [item.suboperation_l1, item.suboperation_l2].filter(Boolean).join(' · ');
-        const hasNote = Boolean(item.memo?.trim());
-        if (hasNote) row.classList.add('operation-row--has-note');
-        row.innerHTML = `
-            <button class="operation-row__date" type="button" aria-label="Редактировать операцию от ${formatDate(item.action_date)}">
-                <time datetime="${escapeHtml(item.action_date)}">${formatDate(item.action_date)}</time>
-            </button>
-            <span class="operation-row__account">${escapeHtml(item.account)}<small>${escapeHtml(item.currency)}</small></span>
-            <span class="operation-row__operation">${escapeHtml(operation)}</span>
-            <span class="operation-row__suboperation">
-                <span class="operation-row__suboperation-text">${escapeHtml(suboperation || '—')}</span>
-                ${hasNote ? `<small class="operation-row__note">${escapeHtml(item.memo)}</small>` : ''}
-            </span>
-            <strong class="operation-row__amount">${item.amount == null ? '—' : money.format(item.amount)} <small>${escapeHtml(item.currency)}</small></strong>`;
-        row.querySelector('.operation-row__account').title = item.account || '';
-        row.querySelector('.operation-row__operation').title = operation;
-        row.querySelector('.operation-row__suboperation').title = suboperation || '';
-        if (hasNote) row.querySelector('.operation-row__note').fullText = item.memo;
-        row.querySelector('.operation-row__date').addEventListener('click', event => {
-            event.stopPropagation();
-            openOperation(item);
-        });
-        row.addEventListener('dblclick', () => openOperation(item));
-        return row;
-    }
-
-    message(text, error = false, index = 0) {
-        const element = document.createElement('p');
-        element.className = 'operation-panel__message' + (error ? ' operation-panel__message--error' : '');
-        element.style.transform = `translateY(${index * ROW_HEIGHT}px)`;
-        element.textContent = text;
-        return element;
-    }
-}
-
 const lists = [...document.querySelectorAll('.operation-panel')].map(panel => new VirtualList(panel));
 
 function selectOperationsTab(flow) {
@@ -322,7 +150,7 @@ async function refresh() {
         renderSummary(data);
         status.textContent = `Найдено ${Number(data.operation_count).toLocaleString('ru-RU')} операций`;
     } catch (error) {
-        status.textContent = error.message;
+        if (version === requestVersion) status.textContent = error.message;
     }
 }
 
@@ -340,19 +168,6 @@ function summaryTable(rows) {
         <td class="summary-table__value--strong">${money.format(row.closing)}</td>
     </tr>`).join('');
     return `<table class="summary-table"><thead><tr><th>Валюта</th><th>Начальное</th><th>Приход</th><th>Расход</th><th>За период</th><th>Конечное</th></tr></thead><tbody>${body || '<tr><td colspan="6">Нет данных</td></tr>'}</tbody></table>`;
-}
-
-async function fetchJson(url, options = {}) {
-    const { response, data } = await connectionRequest(url, {
-        ...options,
-        headers: { Accept: 'application/json', ...options.headers },
-    });
-    if (response.status === 401) {
-        location.replace('/login');
-        throw new Error('Требуется вход');
-    }
-    if (!response.ok) throw new Error(data.error || 'Ошибка загрузки');
-    return data;
 }
 
 function formatDate(value) {
@@ -500,6 +315,7 @@ for (const button of document.querySelectorAll('[data-close-dialog]')) {
 operationForm.addEventListener('submit', async event => {
     event.preventDefault();
     const submit = operationForm.querySelector('[type="submit"]');
+    if (submit.disabled) return;
     const data = Object.fromEntries(new FormData(operationForm));
     data.is_debit = data.is_debit === 'true';
     data.is_black = operationForm.elements.is_black.checked;
@@ -586,14 +402,7 @@ document.querySelector('#reset-filters').addEventListener('click', () => {
     refresh();
 });
 
-document.querySelector('#logout').addEventListener('click', async () => {
-    try {
-        await fetchJson('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': currentUser.csrf_token } });
-        location.replace('/login');
-    } catch (error) {
-        status.textContent = 'Не удалось выйти. Повторите попытку.';
-    }
-});
+bindLogout(() => currentUser.csrf_token);
 
 document.querySelector('#data-schema').addEventListener('change', async event => {
     event.target.disabled = true;

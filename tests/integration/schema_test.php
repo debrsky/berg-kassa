@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__, 2) . '/src/app.php';
+require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $schema = env('LOCAL_PGSQL_SCHEMA');
 initAuth(db());

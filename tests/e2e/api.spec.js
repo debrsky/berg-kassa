@@ -320,3 +320,80 @@ test('поиск по примечанию валидирует параметр
         expect((await request.get(`/api/action-summary?${query}`)).status()).toBe(400);
     }
 });
+
+test('большие суммы сохраняются и сальдо вычисляется точно', async ({ request }) => {
+    const lookups = await (await request.get('/api/lookups')).json();
+    const ids = [];
+    const memo = `precision-${Date.now()}`;
+    const body = {
+        account_id: lookups.accounts[0].id, currency_id: lookups.currencies[0].id,
+        suboperation_id: lookups.suboperations_l2[0].id, action_date: '2026-01-15T12:00',
+        is_black: false, memo,
+    };
+    try {
+        for (const [is_debit, amount] of [[true, '99999999999999999.99'], [false, '99999999999999999.98']]) {
+            const response = await request.post('/api/actions', { headers: { 'X-CSRF-Token': csrf }, data: { ...body, is_debit, amount } });
+            expect(response.status()).toBe(201);
+            ids.push((await response.json()).id);
+        }
+        const params = new URLSearchParams({ memo, all_time: '1' });
+        const summary = await (await request.get(`/api/action-summary?${params}`)).json();
+        expect(summary.currencies[0].income).toBe('99999999999999999.99');
+        expect(summary.currencies[0].current).toBe('0.01');
+        expect(summary.currencies[0].closing).toBe('0.01');
+        const actions = await (await request.get(`/api/actions?${params}&flow=income`)).json();
+        expect(actions.items[0].amount).toBe('99999999999999999.99');
+    } finally {
+        for (const id of ids) expect((await request.delete(`/api/actions/${id}`, { headers: { 'X-CSRF-Token': csrf } })).ok()).toBeTruthy();
+    }
+});
+
+for (const method of ['PUT', 'DELETE']) {
+    test(`${method}: изменение защиты конкурентным запросом учитывается до записи`, async ({ request, playwright, baseURL }) => {
+        test.skip(Boolean(process.env.E2E_BASE_URL), 'Проверка блокировок использует локальную БД');
+        test.skip(!restrictedLogin || !restrictedPassword, 'Нет ограниченного пользователя');
+        const { spawn } = require('node:child_process');
+        const { once } = require('node:events');
+        const restricted = await playwright.request.newContext({ baseURL });
+        let child, finished, pending, id;
+        try {
+            expect((await restricted.post('/api/login', { data: { login: restrictedLogin, password: restrictedPassword } })).ok()).toBeTruthy();
+            const limited = await (await restricted.get('/api/me')).json();
+            expect(limited.can_view_protected).toBe(false);
+            expect((await request.post('/api/schema', {
+                headers: { 'X-CSRF-Token': csrf }, data: { data_schema: limited.data_schema },
+            })).ok()).toBeTruthy();
+            const lookups = await (await request.get('/api/lookups')).json();
+            const body = {
+                account_id: lookups.accounts[0].id, currency_id: lookups.currencies[0].id,
+                suboperation_id: lookups.suboperations_l2[0].id, action_date: '2026-01-15T12:00',
+                amount: '1.00', is_debit: true, is_black: false, memo: `lock-test-${Date.now()}`,
+            };
+            const created = await request.post('/api/actions', { headers: { 'X-CSRF-Token': csrf }, data: body });
+            expect(created.status()).toBe(201);
+            id = (await created.json()).id;
+            child = spawn('.tools/php/php.exe', ['tests/integration/hold-action.php', limited.data_schema, String(id)], { windowsHide: true });
+            finished = once(child, 'close');
+            let output = '', errors = '';
+            child.stdout.on('data', chunk => output += chunk);
+            child.stderr.on('data', chunk => errors += chunk);
+            await expect.poll(() => output, { timeout: 12_000 }).toContain('READY');
+            pending = restricted.fetch(`/api/actions/${id}`, {
+                method, headers: { 'X-CSRF-Token': limited.csrf_token }, data: body,
+            });
+            child.stdin.write('wait\n');
+            await expect.poll(() => output, { timeout: 12_000 }).toContain('BLOCKED');
+            child.stdin.end('commit\n');
+            expect((await finished)[0], errors).toBe(0);
+            expect((await pending).status()).toBe(method === 'PUT' ? 403 : 404);
+            const result = await (await request.get(`/api/actions?all_time=1&include_protected=1&flow=income&memo=${body.memo}`)).json();
+            expect(result.items).toHaveLength(1);
+            expect(result.items[0].is_black).toBe(true);
+        } finally {
+            if (child && child.exitCode === null) { child.kill(); await finished; }
+            if (pending) await pending.catch(() => {});
+            if (id) expect([200, 404]).toContain((await request.delete(`/api/actions/${id}`, { headers: { 'X-CSRF-Token': csrf } })).status());
+            await restricted.dispose();
+        }
+    });
+}

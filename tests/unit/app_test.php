@@ -50,9 +50,17 @@ check(str_contains($sql, 'a.account_id = :account_id'), 'filterSql applies IDs')
 check(str_contains($sql, 'a.is_black = false'), 'filterSql hides protected rows');
 check($params['account_id'] === 7 && count($params) === 3, 'filterSql binds expected values');
 
-$balances = addBalances([['opening' => '10', 'income' => '5.25', 'expense' => '2.10']]);
-check($balances[0]['current'] === '3.15', 'current balance is correct');
-check($balances[0]['closing'] === '13.15', 'closing balance is correct');
+check(positiveDecimal('99999999999999999.99', 19, 2, 'amount') === '99999999999999999.99', 'large amount remains exact');
+check(positiveDecimal('0001.995', 19, 2, 'amount') === '2.00', 'decimal rounding carries exactly');
+check(positiveDecimal('1.23455', 12, 4, 'rate') === '1.2346', 'rate rounds to four digits');
+foreach (['0', '0.001', '-1', '99999999999999999.995', [], true, '1e99'] as $invalid) {
+    try {
+        positiveDecimal($invalid, 19, 2, 'amount');
+        check(false, 'invalid amount rejected');
+    } catch (InvalidArgumentException) {
+        check(true, 'invalid amount rejected');
+    }
+}
 check(referenceConfig('accounts')['table'] === 'accounts', 'reference config is available');
 try {
     referenceConfig('invalid');

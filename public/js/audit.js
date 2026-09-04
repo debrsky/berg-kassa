@@ -10,13 +10,6 @@ let total = 0;
 let csrf;
 let requestVersion = 0;
 
-async function fetchJson(url, options = {}) {
-    const { response, data } = await connectionRequest(url, { ...options, headers: { Accept: 'application/json', ...options.headers } });
-    if (response.status === 401) location.replace('/login');
-    if (!response.ok) throw new Error(data.error || 'Ошибка загрузки');
-    return data;
-}
-
 function cell(value) {
     const element = document.createElement('td');
     element.textContent = value ?? '—';
@@ -91,14 +84,7 @@ document.querySelector('#audit-reset').addEventListener('click', () => {
 });
 previous.addEventListener('click', () => { offset = Math.max(0, offset - limit); load(); });
 next.addEventListener('click', () => { offset += limit; load(); });
-document.querySelector('#logout').addEventListener('click', async () => {
-    try {
-        await fetchJson('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
-        location.replace('/login');
-    } catch (error) {
-        status.textContent = 'Не удалось выйти. Повторите попытку.';
-    }
-});
+bindLogout(() => csrf);
 
 (async () => {
     try {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/src/app.php';
+require dirname(__DIR__) . '/src/bootstrap.php';
 
 $days = filter_var($argv[1] ?? '180', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 if ($days === false) {

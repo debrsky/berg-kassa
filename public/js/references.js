@@ -23,16 +23,6 @@ let referenceRecords = [];
 let activeReferenceType = '';
 let requestVersion = 0;
 
-async function fetchJson(url, options = {}) {
-    const { response, data } = await connectionRequest(url, { ...options, headers: { Accept: 'application/json', ...options.headers } });
-    if (response.status === 401) {
-        location.replace('/login');
-        throw new Error('Требуется вход');
-    }
-    if (!response.ok) throw new Error(data.error || 'Ошибка загрузки');
-    return data;
-}
-
 function localDateTime(value = new Date()) {
     const local = new Date(value.getTime() - value.getTimezoneOffset() * 60000);
     return local.toISOString().slice(0, 16);
@@ -154,7 +144,7 @@ function loadHierarchy(selected = null) {
     }
 }
 
-async function loadReferences(selectedId = '') {
+async function loadReferences(selectedId = '', propagate = false) {
     const version = ++requestVersion;
     const treeMode = referenceType.value === 'operation_tree';
     manager.classList.toggle('reference-manager--hierarchy', treeMode);
@@ -177,6 +167,7 @@ async function loadReferences(selectedId = '') {
         editReference(selected || null);
         referenceMessage.textContent = referenceRecords.length ? '' : 'Записей пока нет';
     } catch (error) {
+        if (propagate) throw error;
         if (version === requestVersion) referenceMessage.textContent = error.message;
     }
 }
@@ -227,21 +218,28 @@ referenceForm.addEventListener('submit', async event => {
         data.rate = referenceForm.elements.rate.value;
     }
     referenceMessage.textContent = 'Сохранение…';
+    let committed = false;
+    document.querySelector('#data-schema').disabled = true;
+    manager.inert = true;
     try {
         const saved = await fetchJson(`/api/references/${type}${id ? `/${id}` : ''}`, {
             method: id ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': currentUser.csrf_token },
             body: JSON.stringify(data),
         });
+        committed = true;
+        referenceForm.elements.id.value = saved.id;
         lookups = await fetchJson('/api/lookups');
         if (referenceType.value === 'operation_tree') {
             const record = lookups[type].find(item => String(item.id) === String(saved.id));
             loadHierarchy({ type, record });
-        } else await loadReferences(saved.id);
+        } else await loadReferences(saved.id, true);
         referenceMessage.textContent = 'Сохранено';
     } catch (error) {
-        referenceMessage.textContent = error.message;
+        referenceMessage.textContent = committed ? `Сохранено, но список не обновился. ${error.message}` : error.message;
     } finally {
+        document.querySelector('#data-schema').disabled = false;
+        manager.inert = false;
         submit.disabled = false;
     }
 });
@@ -251,13 +249,22 @@ document.querySelector('#delete-reference').addEventListener('click', async () =
     const id = referenceForm.querySelector('[name="id"]').value;
     if (!id || !confirm('Удалить запись справочника без возможности восстановления?')) return;
     referenceMessage.textContent = 'Удаление…';
+    let committed = false;
+    document.querySelector('#data-schema').disabled = true;
+    manager.inert = true;
     try {
         await fetchJson(`/api/references/${type}/${id}`, { method: 'DELETE', headers: { 'X-CSRF-Token': currentUser.csrf_token } });
+        committed = true;
+        referenceForm.elements.id.value = '';
+        referenceForm.hidden = true;
         lookups = await fetchJson('/api/lookups');
-        await loadReferences();
+        await loadReferences('', true);
         referenceMessage.textContent = 'Удалено';
     } catch (error) {
-        referenceMessage.textContent = error.message;
+        referenceMessage.textContent = committed ? `Удалено, но список не обновился. ${error.message}` : error.message;
+    } finally {
+        document.querySelector('#data-schema').disabled = false;
+        manager.inert = false;
     }
 });
 
@@ -273,24 +280,17 @@ document.querySelector('#data-schema').addEventListener('change', async event =>
         });
         currentUser.data_schema = event.target.value;
         lookups = await fetchJson('/api/lookups');
-        await loadReferences();
+        await loadReferences('', true);
+        manager.inert = false;
         status.textContent = `Схема ${currentUser.data_schema}`;
     } catch (error) {
         status.textContent = error.message;
     } finally {
         event.target.disabled = false;
-        manager.inert = false;
     }
 });
 
-document.querySelector('#logout').addEventListener('click', async () => {
-    try {
-        await fetchJson('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': currentUser.csrf_token } });
-        location.replace('/login');
-    } catch (error) {
-        status.textContent = error.message;
-    }
-});
+bindLogout(() => currentUser.csrf_token);
 
 async function init() {
     try {
@@ -311,7 +311,7 @@ async function init() {
             return;
         }
         lookups = await fetchJson('/api/lookups');
-        await loadReferences();
+        await loadReferences('', true);
         manager.inert = false;
         status.textContent = `Схема ${currentUser.data_schema}`;
     } catch (error) {

@@ -6,7 +6,7 @@ header('Content-Type: application/json; charset=utf-8');
 // Cache-Control is set globally in .htaccess.
 
 try {
-    require dirname(__DIR__) . '/src/app.php';
+    require dirname(__DIR__) . '/src/bootstrap.php';
     db()->query('SELECT 1')->fetchColumn();
     echo json_encode([
         'ok' => true,

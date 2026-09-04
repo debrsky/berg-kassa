@@ -33,11 +33,13 @@ try {
 }
 
 $uploads = @(
-    @{ Local = (Join-Path $project 'src\app.php'); Remote = 'src/app.php' },
-    @{ Local = (Join-Path $project 'src\navigation.php'); Remote = 'src/navigation.php' },
     @{ Local = (Join-Path $project 'bin\create-user.php'); Remote = 'bin/create-user.php' },
     @{ Local = (Join-Path $project 'bin\prune-audit-log.php'); Remote = 'bin/prune-audit-log.php' }
 )
+Get-ChildItem (Join-Path $project 'src') -File -Filter '*.php' |
+    Sort-Object @{ Expression = { $_.Name -eq 'app.php' } }, Name | ForEach-Object {
+    $uploads += @{ Local = $_.FullName; Remote = "src/$($_.Name)" }
+}
 $publicRoot = (Resolve-Path (Join-Path $project 'public')).Path.TrimEnd('\')
 Get-ChildItem $publicRoot -File -Recurse -Force |
     Where-Object Name -ne 'router.php' |

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/src/app.php';
+require dirname(__DIR__) . '/src/bootstrap.php';
 
 initAuth(db());
 

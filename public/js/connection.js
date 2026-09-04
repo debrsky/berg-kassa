@@ -51,3 +51,26 @@ const connectionRequest = (() => {
         }
     };
 })();
+
+async function fetchJson(url, options = {}) {
+    const { response, data } = await connectionRequest(url, {
+        ...options, headers: { Accept: 'application/json', ...options.headers },
+    });
+    if (response.status === 401) {
+        location.replace('/login');
+        throw new Error('Требуется вход');
+    }
+    if (!response.ok) throw new Error(data.error || 'Ошибка загрузки');
+    return data;
+}
+
+function bindLogout(token) {
+    document.querySelector('#logout').addEventListener('click', async () => {
+        try {
+            await fetchJson('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': token() } });
+            location.replace('/login');
+        } catch (error) {
+            document.querySelector('#status').textContent = 'Не удалось выйти. Повторите попытку.';
+        }
+    });
+}

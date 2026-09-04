@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/src/app.php';
+require dirname(__DIR__) . '/src/bootstrap.php';
 
 // X-Robots-Tag is set globally in .htaccess.
 
@@ -522,6 +522,7 @@ try {
     </header>
     <p class="note-popover__text" data-note-text></p>
 </aside>
+<script src="/js/virtual-list.js?v=<?= filemtime(__DIR__ . '/js/virtual-list.js') ?>" defer></script>
 <script src="/js/app.js?v=<?= filemtime(__DIR__ . '/js/app.js') ?>" defer></script>
 <?php endif; ?>
 <?php if (!$isLoginPage): ?>

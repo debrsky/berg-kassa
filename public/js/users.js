@@ -5,13 +5,6 @@ const message = document.querySelector('#user-message');
 let csrf;
 let users = [];
 
-async function fetchJson(url, options = {}) {
-    const { response, data } = await connectionRequest(url, { ...options, headers: { Accept: 'application/json', ...options.headers } });
-    if (response.status === 401) location.replace('/login');
-    if (!response.ok) throw new Error(data.error || 'Ошибка загрузки');
-    return data;
-}
-
 function edit(user = null) {
     form.reset();
     form.elements.id.value = user?.id || '';
@@ -64,31 +57,28 @@ form.addEventListener('submit', async event => {
         is_active: form.elements.is_active.checked,
     };
     message.textContent = 'Сохранение…';
+    let saved = false;
     try {
-        const saved = await fetchJson(id ? `/api/users/${id}` : '/api/users', {
+        const result = await fetchJson(id ? `/api/users/${id}` : '/api/users', {
             method: id ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
             body: JSON.stringify(data),
         });
+        saved = true;
+        edit({ ...data, id: result.id });
+        message.textContent = 'Сохранено. Обновление списка…';
         await load();
-        edit(users.find(user => user.id === saved.id));
+        edit(users.find(user => user.id === result.id));
         message.textContent = 'Сохранено';
     } catch (error) {
-        message.textContent = error.message;
+        message.textContent = saved ? `Сохранено, но список не обновился. ${error.message}` : error.message;
     } finally {
         submit.disabled = false;
     }
 });
 
 document.querySelector('#new-user').addEventListener('click', () => edit());
-document.querySelector('#logout').addEventListener('click', async () => {
-    try {
-        await fetchJson('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
-        location.replace('/login');
-    } catch (error) {
-        status.textContent = 'Не удалось выйти. Повторите попытку.';
-    }
-});
+bindLogout(() => csrf);
 
 (async () => {
     try {
