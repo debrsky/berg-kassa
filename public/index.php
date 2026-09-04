@@ -420,10 +420,6 @@ try {
             <span class="summary__count" id="summary-count"></span>
         </div>
         <div class="summary__table-wrap" id="currency-summary"></div>
-        <details class="summary__details">
-            <summary class="summary__details-title">По направлениям</summary>
-            <div class="summary__table-wrap" id="direction-summary"></div>
-        </details>
     </section>
 
 </main>

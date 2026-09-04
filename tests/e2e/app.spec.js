@@ -38,6 +38,8 @@ test('основная страница и форма добавления ра�
     const me = await (await page.request.get('/api/me')).json();
     await expect(page.getByRole('heading', { name: 'Касса' })).toBeVisible();
     await expect(page.getByLabel('Начало периода')).toBeVisible();
+    await expect(page.locator('#currency-summary table')).toBeVisible();
+    await expect(page.locator('#direction-summary, .summary__details')).toHaveCount(0);
     const protectedFilter = page.locator('#filters [name="include_protected"]');
     await expect(protectedFilter).toBeVisible({ visible: me.can_view_protected });
     if (await protectedFilter.isVisible()) await protectedFilter.check();

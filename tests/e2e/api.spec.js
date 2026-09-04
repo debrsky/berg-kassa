@@ -41,7 +41,8 @@ test('итоги удовлетворяют формулам баланса', as
     expect(response.ok()).toBeTruthy();
     const data = await response.json();
     expect(data.operation_count).toBe(data.currencies.reduce((sum, row) => sum + Number(row.operation_count), 0));
-    for (const row of [...data.currencies, ...data.directions]) {
+    expect(data).not.toHaveProperty('directions');
+    for (const row of data.currencies) {
         expect(Number(row.current)).toBeCloseTo(Number(row.income) - Number(row.expense), 2);
         expect(Number(row.closing)).toBeCloseTo(Number(row.opening) + Number(row.current), 2);
     }

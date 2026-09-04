@@ -1029,15 +1029,8 @@ function summary(array $user): never
     $statement->execute($params);
     $currencies = addBalances($statement->fetchAll());
 
-    $statement = db()->prepare('SELECT d.id AS direction_id, COALESCE(d.name, \'Без направления\') AS direction, '
-        . 'c.id AS currency_id, c.name AS currency, ' . $measures . $base
-        . ' GROUP BY d.id, d.name, c.id, c.name ORDER BY d.name NULLS LAST, d.id, c.name NULLS LAST, c.id');
-    $statement->execute($params);
-    $directions = addBalances($statement->fetchAll());
-
     jsonResponse([
         'currencies' => $currencies,
-        'directions' => $directions,
         'operation_count' => array_sum(array_column($currencies, 'operation_count')),
     ]);
 }

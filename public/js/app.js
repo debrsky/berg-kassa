@@ -302,14 +302,11 @@ async function refresh() {
 
 function renderSummary(data) {
     document.querySelector('#summary-count').textContent = `${Number(data.operation_count).toLocaleString('ru-RU')} операций`;
-    document.querySelector('#currency-summary').innerHTML = summaryTable(data.currencies, false);
-    document.querySelector('#direction-summary').innerHTML = summaryTable(data.directions, true);
+    document.querySelector('#currency-summary').innerHTML = summaryTable(data.currencies);
 }
 
-function summaryTable(rows, withDirection) {
-    const heading = withDirection ? '<th>Направление</th>' : '';
+function summaryTable(rows) {
     const body = rows.map(row => `<tr>
-        ${withDirection ? `<td>${escapeHtml(row.direction)}</td>` : ''}
         <td>${escapeHtml(row.currency)}</td>
         <td>${money.format(row.opening)}</td>
         <td class="summary-table__value--income">${money.format(row.income)}</td>
@@ -317,7 +314,7 @@ function summaryTable(rows, withDirection) {
         <td>${money.format(row.current)}</td>
         <td class="summary-table__value--strong">${money.format(row.closing)}</td>
     </tr>`).join('');
-    return `<table class="summary-table"><thead><tr>${heading}<th>Валюта</th><th>Начальное</th><th>Приход</th><th>Расход</th><th>За период</th><th>Конечное</th></tr></thead><tbody>${body || '<tr><td colspan="7">Нет данных</td></tr>'}</tbody></table>`;
+    return `<table class="summary-table"><thead><tr><th>Валюта</th><th>Начальное</th><th>Приход</th><th>Расход</th><th>За период</th><th>Конечное</th></tr></thead><tbody>${body || '<tr><td colspan="6">Нет данных</td></tr>'}</tbody></table>`;
 }
 
 async function fetchJson(url, options = {}) {
