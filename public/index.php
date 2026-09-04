@@ -111,6 +111,8 @@ try {
     <link rel="stylesheet" href="/css/app.css?v=<?= filemtime(__DIR__ . '/css/app.css') ?>">
 </head>
 <body>
+<div class="connection-warning" role="status" hidden></div>
+<script src="/js/connection.js?v=<?= filemtime(__DIR__ . '/js/connection.js') ?>" defer></script>
 <noscript><p role="alert">Для работы приложения включите JavaScript и обновите страницу.</p></noscript>
 <?php if ($isLoginPage): ?>
 <main class="login-page">

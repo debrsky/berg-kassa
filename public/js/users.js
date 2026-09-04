@@ -6,8 +6,7 @@ let csrf;
 let users = [];
 
 async function fetchJson(url, options = {}) {
-    const response = await fetch(url, { ...options, headers: { Accept: 'application/json', ...options.headers } });
-    const data = await response.json();
+    const { response, data } = await connectionRequest(url, { ...options, headers: { Accept: 'application/json', ...options.headers } });
     if (response.status === 401) location.replace('/login');
     if (!response.ok) throw new Error(data.error || 'Ошибка загрузки');
     return data;

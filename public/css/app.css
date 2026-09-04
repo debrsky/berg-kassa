@@ -1446,3 +1446,10 @@
     border: 0;
     border-top: 1px solid var(--color-border);
 }
+.connection-warning {
+    padding: var(--space-3) var(--space-4);
+    color: var(--color-protected);
+    background: var(--color-protected-soft);
+    border-bottom: 1px solid currentColor;
+    overflow-wrap: anywhere;
+}

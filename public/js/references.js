@@ -24,8 +24,7 @@ let activeReferenceType = '';
 let requestVersion = 0;
 
 async function fetchJson(url, options = {}) {
-    const response = await fetch(url, { ...options, headers: { Accept: 'application/json', ...options.headers } });
-    const data = await response.json();
+    const { response, data } = await connectionRequest(url, { ...options, headers: { Accept: 'application/json', ...options.headers } });
     if (response.status === 401) {
         location.replace('/login');
         throw new Error('Требуется вход');

@@ -343,11 +343,10 @@ function summaryTable(rows) {
 }
 
 async function fetchJson(url, options = {}) {
-    const response = await fetch(url, {
+    const { response, data } = await connectionRequest(url, {
         ...options,
         headers: { Accept: 'application/json', ...options.headers },
     });
-    const data = await response.json();
     if (response.status === 401) {
         location.replace('/login');
         throw new Error('Требуется вход');
