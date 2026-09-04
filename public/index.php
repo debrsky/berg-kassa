@@ -113,7 +113,7 @@ try {
 <body>
 <?php if ($isLoginPage): ?>
 <main class="login-page">
-    <button class="theme-toggle" id="theme-toggle" type="button">Тема: Системная</button>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
     <section class="login-card">
         <p class="login-card__eyebrow">Berg Kassa</p>
         <h1 class="login-card__title">Вход</h1>
@@ -141,7 +141,7 @@ try {
             <h1 class="dashboard__title">Журнал аудита</h1>
         </div>
         <div class="dashboard__session">
-            <button class="theme-toggle" id="theme-toggle" type="button">Тема: Системная</button>
+            <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
             <span class="dashboard__user" id="current-user"></span>
             <button class="dashboard__logout" type="button" id="logout">Выйти</button>
             <a class="dashboard__link" href="/">← Операции</a>
@@ -177,7 +177,7 @@ try {
     <header class="dashboard__header">
         <div><p class="dashboard__eyebrow">Безопасность</p><h1 class="dashboard__title">Пользователи</h1></div>
         <div class="dashboard__session">
-            <button class="theme-toggle" id="theme-toggle" type="button">Тема: Системная</button>
+            <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
             <span class="dashboard__user" id="current-user"></span>
             <button class="dashboard__logout" type="button" id="logout">Выйти</button>
             <a class="dashboard__link" href="/">← Операции</a>
@@ -210,7 +210,7 @@ try {
             <h1 class="dashboard__title">Справочники</h1>
         </div>
         <div class="dashboard__session">
-            <button class="theme-toggle" id="theme-toggle" type="button">Тема: Системная</button>
+            <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
             <span class="dashboard__user" id="current-user"></span>
             <label class="dashboard__schema-label">
                 Схема
@@ -304,7 +304,7 @@ try {
             <h1 class="dashboard__title">Касса</h1>
         </div>
         <div class="dashboard__session">
-            <button class="theme-toggle" id="theme-toggle" type="button">Тема: Системная</button>
+            <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
             <span class="dashboard__user" id="current-user"></span>
             <label class="dashboard__schema-label">
                 Схема

@@ -13,13 +13,18 @@ test('неавторизованного пользователя перенап
 test('тема переключается и сохраняется', async ({ page }) => {
     await page.goto('/login');
     const toggle = page.locator('#theme-toggle');
-    await expect(toggle).toHaveText('Тема: Системная');
+    await expect(toggle).toHaveAttribute('title', 'Тема: Системная');
+    await expect(toggle).toHaveCSS('width', '36px');
+    await expect(toggle).toHaveCSS('height', '36px');
     await toggle.click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await toggle.click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.reload();
-    await expect(toggle).toHaveText('Тема: Тёмная');
+    await expect(toggle).toHaveAttribute('title', 'Тема: Тёмная');
+    await expect(toggle).toHaveAccessibleName('Тема: Тёмная. Нажмите, чтобы переключить');
+    await expect(toggle).toHaveCSS('width', '36px');
+    await expect(toggle).toHaveCSS('height', '36px');
     await toggle.click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'system');
 });

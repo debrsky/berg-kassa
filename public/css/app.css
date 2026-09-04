@@ -10,8 +10,13 @@
     z-index: 20;
     top: var(--space-3);
     right: var(--space-3);
-    min-height: 2rem;
-    padding: var(--space-1) var(--space-3);
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
+    flex-shrink: 0;
+    padding: 0;
     border: 1px solid var(--color-border);
     border-radius: 999px;
     color: var(--color-text);
