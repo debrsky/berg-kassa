@@ -211,13 +211,13 @@ try {
             <span class="dashboard__user" id="current-user"></span>
             <label class="dashboard__schema-label">
                 Схема
-                <select class="dashboard__schema" id="data-schema" aria-label="Схема данных"></select>
+                <select class="dashboard__schema" id="data-schema" disabled aria-label="Схема данных"></select>
             </label>
             <?php require __DIR__ . '/../src/navigation.php'; ?>
             <p class="dashboard__status" id="status" role="status">Загрузка…</p>
         </div>
     </header>
-    <section class="reference-manager<?= $pageUser['can_view_protected'] ? '' : ' reference-manager--readonly' ?>">
+    <section class="reference-manager<?= $pageUser['can_view_protected'] ? '' : ' reference-manager--readonly' ?>" inert>
         <div class="reference-manager__toolbar">
             <label class="reference-manager__field">
                 <span>Справочник</span>
@@ -303,14 +303,15 @@ try {
             <span class="dashboard__user" id="current-user"></span>
             <label class="dashboard__schema-label">
                 Схема
-                <select class="dashboard__schema" id="data-schema" aria-label="Схема данных"></select>
+                <select class="dashboard__schema" id="data-schema" disabled aria-label="Схема данных"></select>
             </label>
             <?php require __DIR__ . '/../src/navigation.php'; ?>
             <p class="dashboard__status" id="status" role="status">Загрузка…</p>
         </div>
     </header>
 
-    <form class="filter-bar" id="filters">
+    <form id="filters">
+    <fieldset class="filter-bar" id="filter-fields" disabled>
         <label class="filter-bar__field">
             <span class="filter-bar__label">Быстрый выбор</span>
             <select class="filter-bar__control" id="period-preset" aria-label="Период">
@@ -371,6 +372,7 @@ try {
             <input class="filter-bar__control" type="search" name="memo" maxlength="500" placeholder="Поиск по тексту" autocomplete="off">
         </label>
         <button class="filter-bar__reset" type="button" id="reset-filters">Сбросить</button>
+    </fieldset>
     </form>
 
     <div class="operations-toolbar">

@@ -8,6 +8,7 @@ const limit = 50;
 let offset = 0;
 let total = 0;
 let csrf;
+let requestVersion = 0;
 
 async function fetchJson(url, options = {}) {
     const response = await fetch(url, { ...options, headers: { Accept: 'application/json', ...options.headers } });
@@ -55,6 +56,7 @@ function render(items) {
 }
 
 async function load() {
+    const version = ++requestVersion;
     status.textContent = 'Загрузка…';
     const params = new URLSearchParams(new FormData(form));
     for (const [name, value] of [...params]) if (!value) params.delete(name);
@@ -62,6 +64,7 @@ async function load() {
     params.set('limit', limit);
     try {
         const data = await fetchJson(`/api/audit-log?${params}`);
+        if (version !== requestVersion) return;
         total = data.total;
         const event = form.elements.event.value;
         form.elements.event.replaceChildren(new Option('Все события', ''), ...data.events.map(value => new Option(value, value)));
@@ -73,7 +76,7 @@ async function load() {
         next.disabled = offset + limit >= total;
         status.textContent = `Событий: ${total}`;
     } catch (error) {
-        status.textContent = error.message;
+        if (version === requestVersion) status.textContent = error.message;
     }
 }
 

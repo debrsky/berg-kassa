@@ -372,6 +372,8 @@
 }
 
 .filter-bar {
+    min-width: 0;
+    margin: 0;
     display: grid;
     grid-template-columns: repeat(6, minmax(8rem, 1fr));
     gap: var(--space-3);

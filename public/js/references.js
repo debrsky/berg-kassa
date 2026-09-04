@@ -21,6 +21,7 @@ let currentUser;
 let lookups = {};
 let referenceRecords = [];
 let activeReferenceType = '';
+let requestVersion = 0;
 
 async function fetchJson(url, options = {}) {
     const response = await fetch(url, { ...options, headers: { Accept: 'application/json', ...options.headers } });
@@ -155,6 +156,7 @@ function loadHierarchy(selected = null) {
 }
 
 async function loadReferences(selectedId = '') {
+    const version = ++requestVersion;
     const treeMode = referenceType.value === 'operation_tree';
     manager.classList.toggle('reference-manager--hierarchy', treeMode);
     hierarchy.hidden = !treeMode;
@@ -167,14 +169,16 @@ async function loadReferences(selectedId = '') {
     activeReferenceType = referenceType.value;
     referenceMessage.textContent = 'Загрузка…';
     try {
-        referenceRecords = await fetchJson(`/api/references/${currentType()}`);
+        const records = await fetchJson(`/api/references/${currentType()}`);
+        if (version !== requestVersion) return;
+        referenceRecords = records;
         referenceList.replaceChildren(...referenceRecords.map(record => new Option(referenceLabel(record), record.id)));
         const selected = referenceRecords.find(record => String(record.id) === String(selectedId));
         if (selected) referenceList.value = selected.id;
         editReference(selected || null);
         referenceMessage.textContent = referenceRecords.length ? '' : 'Записей пока нет';
     } catch (error) {
-        referenceMessage.textContent = error.message;
+        if (version === requestVersion) referenceMessage.textContent = error.message;
     }
 }
 
@@ -259,6 +263,9 @@ document.querySelector('#delete-reference').addEventListener('click', async () =
 });
 
 document.querySelector('#data-schema').addEventListener('change', async event => {
+    event.target.disabled = true;
+    manager.inert = true;
+    ++requestVersion;
     try {
         await fetchJson('/api/schema', {
             method: 'POST',
@@ -271,6 +278,9 @@ document.querySelector('#data-schema').addEventListener('change', async event =>
         status.textContent = `Схема ${currentUser.data_schema}`;
     } catch (error) {
         status.textContent = error.message;
+    } finally {
+        event.target.disabled = false;
+        manager.inert = false;
     }
 });
 
@@ -303,9 +313,12 @@ async function init() {
         }
         lookups = await fetchJson('/api/lookups');
         await loadReferences();
+        manager.inert = false;
         status.textContent = `Схема ${currentUser.data_schema}`;
     } catch (error) {
         status.textContent = error.message;
+    } finally {
+        document.querySelector('#data-schema').disabled = false;
     }
 }
 

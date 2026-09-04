@@ -174,7 +174,7 @@ class VirtualList {
                 <span class="operation-row__suboperation-text">${escapeHtml(suboperation || '—')}</span>
                 ${hasNote ? `<small class="operation-row__note">${escapeHtml(item.memo)}</small>` : ''}
             </span>
-            <strong class="operation-row__amount">${money.format(item.amount || 0)} <small>${escapeHtml(item.currency)}</small></strong>`;
+            <strong class="operation-row__amount">${item.amount == null ? '—' : money.format(item.amount)} <small>${escapeHtml(item.currency)}</small></strong>`;
         row.querySelector('.operation-row__account').title = item.account || '';
         row.querySelector('.operation-row__operation').title = operation;
         row.querySelector('.operation-row__suboperation').title = suboperation || '';
@@ -597,6 +597,8 @@ document.querySelector('#logout').addEventListener('click', async () => {
 });
 
 document.querySelector('#data-schema').addEventListener('change', async event => {
+    event.target.disabled = true;
+    document.querySelector('#filter-fields').disabled = true;
     for (const button of document.querySelectorAll('[data-add-flow]')) button.disabled = true;
     try {
         await fetchJson('/api/schema', {
@@ -609,10 +611,13 @@ document.querySelector('#data-schema').addEventListener('change', async event =>
         fillSelect('account_id');
         fillSelect('currency_id');
         refreshCascade();
+        document.querySelector('#filter-fields').disabled = false;
         for (const button of document.querySelectorAll('[data-add-flow]')) button.disabled = false;
         refresh();
     } catch (error) {
         status.textContent = error.message;
+    } finally {
+        event.target.disabled = false;
     }
 });
 
@@ -645,10 +650,13 @@ async function init() {
         fillSelect('account_id');
         fillSelect('currency_id');
         refreshCascade();
+        document.querySelector('#filter-fields').disabled = false;
         for (const button of document.querySelectorAll('[data-add-flow]')) button.disabled = false;
         refresh();
     } catch (error) {
         status.textContent = error.message;
+    } finally {
+        document.querySelector('#data-schema').disabled = false;
     }
 }
 
