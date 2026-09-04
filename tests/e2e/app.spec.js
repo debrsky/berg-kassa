@@ -63,6 +63,24 @@ test('основная страница и форма добавления ра�
     await page.getByRole('button', { name: 'Закрыть' }).click();
 });
 
+test('поиск по примечанию применяется и сохраняется', async ({ page }) => {
+    const memo = page.locator('#filters [name="memo"]');
+    await memo.fill('аренда');
+    await expect.poll(() => new URL(page.url()).searchParams.get('memo')).toBe('аренда');
+    await page.reload();
+    await expect(memo).toHaveValue('аренда');
+    await expect(page.locator('#status')).toContainText('Найдено');
+    await memo.fill('50%_!');
+    await memo.press('Enter');
+    await expect.poll(() => new URL(page.url()).searchParams.get('memo')).toBe('50%_!');
+    await memo.fill('');
+    await expect.poll(() => new URL(page.url()).searchParams.has('memo')).toBe(false);
+    await memo.fill('сброс');
+    await page.locator('#reset-filters').click();
+    await expect(memo).toHaveValue('');
+    await expect.poll(() => new URL(page.url()).searchParams.has('memo')).toBe(false);
+});
+
 test('готовые периоды и проверка дат работают', async ({ page }) => {
     await page.clock.setFixedTime(new Date(2024, 2, 1, 12));
     const preset = page.getByLabel('Период', { exact: true });

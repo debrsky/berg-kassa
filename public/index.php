@@ -365,6 +365,10 @@ try {
         <?php else: ?>
         <input type="checkbox" name="include_protected" hidden>
         <?php endif; ?>
+        <label class="filter-bar__field">
+            <span class="filter-bar__label">Примечание</span>
+            <input class="filter-bar__control" type="search" name="memo" maxlength="500" placeholder="Поиск по тексту" autocomplete="off">
+        </label>
         <button class="filter-bar__reset" type="button" id="reset-filters">Сбросить</button>
     </form>
 

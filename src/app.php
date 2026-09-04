@@ -528,8 +528,13 @@ function dateParameter(string $name, string $fallback): string
 
 function filters(bool $withPeriod = true, bool $canViewProtected = false): array
 {
+    $memo = $_GET['memo'] ?? '';
+    if (!is_string($memo) || strlen($memo) > 2000) {
+        throw new InvalidArgumentException('Invalid parameter: memo');
+    }
     $today = new DateTimeImmutable('today');
     $values = [
+        'memo' => $memo,
         'account_id' => integerParameter('account_id'),
         'currency_id' => integerParameter('currency_id'),
         'direction_id' => integerParameter('direction_id'),
@@ -564,6 +569,10 @@ function filterSql(array $filters, array &$params, bool $withPeriod): string
             $where[] = "{$column} = :{$name}";
             $params[$name] = $filters[$name];
         }
+    }
+    if (($filters['memo'] ?? '') !== '') {
+        $where[] = "a.memo ILIKE :memo ESCAPE '!'";
+        $params['memo'] = '%' . strtr($filters['memo'], ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
     }
     if (!$filters['include_protected']) {
         $where[] = 'a.is_black = false';

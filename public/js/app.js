@@ -20,6 +20,8 @@ const lookupFields = {
 };
 let lookups = {};
 let requestVersion = 0;
+let memoTimer;
+let appliedFilters = new URLSearchParams();
 let currentUser;
 
 class VirtualList {
@@ -58,7 +60,7 @@ class VirtualList {
         const controller = new AbortController();
         let request;
         request = (async () => {
-            const params = filterParams();
+            const params = new URLSearchParams(appliedFilters);
             params.set('flow', this.flow);
             params.set('offset', page * PAGE_SIZE);
             params.set('limit', PAGE_SIZE);
@@ -244,6 +246,7 @@ function defaultDates() {
 function restoreFilters() {
     const params = new URLSearchParams(location.search);
     const [from, to] = defaultDates();
+    form.elements.memo.value = params.get('memo') ?? '';
     form.elements.from_date.value = params.get('from_date') ?? from;
     form.elements.to_date.value = params.get('to_date') ?? to;
     if (params.get('all_time') === '1') {
@@ -302,17 +305,19 @@ function refreshCascade(from = 'direction_id') {
 }
 
 async function refresh() {
+    clearTimeout(memoTimer);
     const from = form.elements.from_date;
     const to = form.elements.to_date;
     to.setCustomValidity(from.value && to.value && from.value > to.value ? 'Начало периода не может быть позже конца' : '');
     if (!form.reportValidity()) return;
     requestVersion++;
     const version = requestVersion;
-    updateUrl(filterParams());
+    appliedFilters = filterParams();
+    updateUrl(appliedFilters);
     status.textContent = 'Обновление…';
     lists.forEach(list => list.reset());
     try {
-        const data = await fetchJson(`/api/action-summary?${filterParams()}`);
+        const data = await fetchJson(`/api/action-summary?${appliedFilters}`);
         if (version !== requestVersion) return;
         renderSummary(data);
         status.textContent = `Найдено ${Number(data.operation_count).toLocaleString('ru-RU')} операций`;
@@ -540,8 +545,23 @@ document.querySelector('#delete-operation').addEventListener('click', async () =
     }
 });
 
-form.addEventListener('submit', event => event.preventDefault());
+form.addEventListener('submit', event => {
+    event.preventDefault();
+    refresh();
+});
+form.elements.memo.addEventListener('input', () => {
+    clearTimeout(memoTimer);
+    if (!form.elements.memo.value) refresh();
+    else memoTimer = setTimeout(refresh, 400);
+});
+form.elements.memo.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        refresh();
+    }
+});
 form.addEventListener('change', event => {
+    if (event.target === form.elements.memo) return;
     const preset = document.querySelector('#period-preset');
     if (event.target === preset) {
         if (!preset.value) return;

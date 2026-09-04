@@ -99,7 +99,7 @@ test('CRUD операции очищает созданные данные', asy
         const body = {
             account_id: account.id, currency_id: currency.id, suboperation_id: suboperation.id,
             action_date: '2026-01-15T12:00', amount: '123.45', exchange_rate: '1',
-            is_debit: true, is_black: false, memo: `E2E ${Date.now()}`,
+            is_debit: true, is_black: false, memo: `E2E ${Date.now()} Аренда 50%_!`,
         };
         let response = await request.post('/api/actions', {
             headers: { 'X-CSRF-Token': csrf },
@@ -108,6 +108,21 @@ test('CRUD операции очищает созданные данные', asy
         expect(response.status()).toBe(201);
         ({ id, posting_id: postingId } = await response.json());
         expect(postingId).toBeTruthy();
+        const query = new URLSearchParams({ all_time: '1', memo: body.memo.toLowerCase(), account_id: String(account.id) });
+        for (const [flow, expectedId] of [['income', id], ['expense', postingId]]) {
+            const result = await request.get(`/api/actions?${query}&flow=${flow}&include_total=1`);
+            expect(result.ok()).toBeTruthy();
+            const data = await result.json();
+            expect(data.total).toBe(1);
+            expect(data.items[0].id).toBe(expectedId);
+        }
+        const summary = await (await request.get(`/api/action-summary?${query}`)).json();
+        expect(summary.operation_count).toBe(2);
+        expect(Number(summary.currencies[0].income)).toBe(123.45);
+        expect(Number(summary.currencies[0].expense)).toBe(123.45);
+        query.set('memo', body.memo.replace('50%_!', '50__!'));
+        expect((await (await request.get(`/api/action-summary?${query}`)).json()).operation_count).toBe(0);
+
         const expenses = await (await request.get(`/api/actions?flow=expense&from_date=2026-01-15&to_date=2026-01-15&account_id=${account.id}&limit=200`)).json();
         expect(expenses.items.some(item => item.id === postingId)).toBeTruthy();
         response = await request.put(`/api/actions/${id}`, {
@@ -296,5 +311,12 @@ test('пустая граница периода не ограничивает �
         if (query.startsWith('from_date=&')) {
             for (const row of summary.currencies) expect(Number(row.opening)).toBe(0);
         }
+    }
+});
+
+test('поиск по примечанию валидирует параметр', async ({ request }) => {
+    for (const query of ['memo[]=x', `memo=${'x'.repeat(2001)}`]) {
+        expect((await request.get(`/api/actions?flow=income&${query}`)).status()).toBe(400);
+        expect((await request.get(`/api/action-summary?${query}`)).status()).toBe(400);
     }
 });
