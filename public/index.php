@@ -143,9 +143,7 @@ try {
         <div class="dashboard__session">
             <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
             <span class="dashboard__user" id="current-user"></span>
-            <button class="dashboard__logout" type="button" id="logout">Выйти</button>
-            <a class="dashboard__link" href="/">← Операции</a>
-            <a class="dashboard__link" href="/users">Пользователи</a>
+            <?php require __DIR__ . '/../src/navigation.php'; ?>
             <p class="dashboard__status" id="status">Загрузка…</p>
         </div>
     </header>
@@ -179,9 +177,7 @@ try {
         <div class="dashboard__session">
             <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
             <span class="dashboard__user" id="current-user"></span>
-            <button class="dashboard__logout" type="button" id="logout">Выйти</button>
-            <a class="dashboard__link" href="/">← Операции</a>
-            <a class="dashboard__link" href="/audit">Журнал аудита</a>
+            <?php require __DIR__ . '/../src/navigation.php'; ?>
             <p class="dashboard__status" id="status">Загрузка…</p>
         </div>
     </header>
@@ -216,13 +212,11 @@ try {
                 Схема
                 <select class="dashboard__schema" id="data-schema" aria-label="Схема данных"></select>
             </label>
-            <a class="dashboard__link" href="/">← Операции</a>
-            <a class="dashboard__link" id="audit-link" href="/audit" hidden>Журнал аудита</a>
-            <a class="dashboard__link" id="users-link" href="/users" hidden>Пользователи</a>
+            <?php require __DIR__ . '/../src/navigation.php'; ?>
             <p class="dashboard__status" id="status">Загрузка…</p>
         </div>
     </header>
-    <section class="reference-manager">
+    <section class="reference-manager<?= $pageUser['can_view_protected'] ? '' : ' reference-manager--readonly' ?>">
         <div class="reference-manager__toolbar">
             <label class="reference-manager__field">
                 <span>Справочник</span>
@@ -310,10 +304,7 @@ try {
                 Схема
                 <select class="dashboard__schema" id="data-schema" aria-label="Схема данных"></select>
             </label>
-            <button class="dashboard__logout" type="button" id="logout">Выйти</button>
-            <a class="dashboard__link" href="/references">Справочники</a>
-            <a class="dashboard__link" id="audit-link" href="/audit" hidden>Журнал аудита</a>
-            <a class="dashboard__link" id="users-link" href="/users" hidden>Пользователи</a>
+            <?php require __DIR__ . '/../src/navigation.php'; ?>
             <p class="dashboard__status" id="status">Загрузка…</p>
         </div>
     </header>
@@ -517,6 +508,9 @@ try {
     <p class="note-popover__text" data-note-text></p>
 </aside>
 <script src="/js/app.js?v=<?= filemtime(__DIR__ . '/js/app.js') ?>" defer></script>
+<?php endif; ?>
+<?php if (!$isLoginPage): ?>
+<script src="/js/navigation.js?v=<?= filemtime(__DIR__ . '/js/navigation.js') ?>" defer></script>
 <?php endif; ?>
 <script src="/js/theme.js?v=<?= filemtime(__DIR__ . '/js/theme.js') ?>" defer></script>
 </body>

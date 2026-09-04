@@ -2,7 +2,7 @@
   "private": true,
   "scripts": {
     "test": "npm run test:static && npm run test:unit && npm run test:integration && npm run test:e2e",
-    "test:static": ".\\.tools\\php\\php.exe -l src\\app.php && .\\.tools\\php\\php.exe -l public\\index.php && .\\.tools\\php\\php.exe -l bin\\prune-audit-log.php && node --check public\\js\\app.js && node --check public\\js\\audit.js && node --check public\\js\\users.js && node --check public\\js\\references.js && node --check public\\js\\login.js && node --check public\\js\\theme.js && python -m py_compile migrate_trading.py",
+    "test:static": ".\\.tools\\php\\php.exe -l src\\app.php && .\\.tools\\php\\php.exe -l src\\navigation.php && .\\.tools\\php\\php.exe -l public\\index.php && .\\.tools\\php\\php.exe -l bin\\prune-audit-log.php && node --check public\\js\\app.js && node --check public\\js\\audit.js && node --check public\\js\\users.js && node --check public\\js\\references.js && node --check public\\js\\login.js && node --check public\\js\\theme.js && node --check public\\js\\navigation.js && python -m py_compile migrate_trading.py",
     "test:unit": ".\\.tools\\php\\php.exe tests\\unit\\app_test.php",
     "test:integration": ".\\.tools\\php\\php.exe tests\\integration\\schema_test.php",
     "test:e2e": "playwright test",

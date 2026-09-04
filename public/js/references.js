@@ -76,6 +76,7 @@ function configureReferenceForm() {
 }
 
 function editReference(record = null, type = currentType(), parentId = '') {
+    if (!currentUser?.can_view_protected) return;
     activeReferenceType = type;
     referenceForm.reset();
     configureReferenceForm();
@@ -263,6 +264,15 @@ document.querySelector('#data-schema').addEventListener('change', async event =>
         lookups = await fetchJson('/api/lookups');
         await loadReferences();
         status.textContent = `Схема ${currentUser.data_schema}`;
+    } catch (error) {
+        status.textContent = error.message;
+    }
+});
+
+document.querySelector('#logout').addEventListener('click', async () => {
+    try {
+        await fetchJson('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': currentUser.csrf_token } });
+        location.replace('/login');
     } catch (error) {
         status.textContent = error.message;
     }

@@ -718,6 +718,7 @@ function referenceBody(array $config): array
 
 function writeReference(array $user, string $type, ?int $id = null): never
 {
+    requireProtectedAccess($user, 'reference_write_denied');
     requireCsrf($user);
     $config = referenceConfig($type);
     $values = referenceBody($config);
@@ -765,6 +766,7 @@ function writeReference(array $user, string $type, ?int $id = null): never
 
 function deleteReference(array $user, string $type, int $id): never
 {
+    requireProtectedAccess($user, 'reference_write_denied');
     requireCsrf($user);
     $config = referenceConfig($type);
     $pdo = db();

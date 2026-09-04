@@ -200,7 +200,20 @@ test('журнал аудита доступен только с правом з
 test('пользователь без права защищённых операций не получает журнал аудита', async ({ request }) => {
     test.skip(!restrictedLogin || !restrictedPassword, 'Задайте E2E_RESTRICTED_USER и E2E_RESTRICTED_PASSWORD');
     expect((await request.post('/api/login', { data: { login: restrictedLogin, password: restrictedPassword } })).ok()).toBeTruthy();
-    expect((await (await request.get('/api/me')).json()).can_view_protected).toBe(false);
+    const restrictedUser = await (await request.get('/api/me')).json();
+    expect(restrictedUser.can_view_protected).toBe(false);
+    expect((await request.get('/audit')).status()).toBe(403);
+    for (const type of ['accounts', 'currencies', 'currency_rates', 'directions', 'action_types', 'suboperations_l1', 'suboperations_l2']) {
+        expect((await request.get(`/api/references/${type}`)).ok()).toBeTruthy();
+        for (const method of ['POST', 'PUT', 'DELETE']) {
+            const response = await request.fetch(`/api/references/${type}${method === 'POST' ? '' : '/2147483647'}`, {
+                method,
+                headers: { 'X-CSRF-Token': restrictedUser.csrf_token },
+                data: {},
+            });
+            expect(response.status(), `${method} ${type}`).toBe(403);
+        }
+    }
     expect((await request.get('/api/audit-log')).status()).toBe(403);
     expect((await request.get('/api/users')).status()).toBe(403);
 });

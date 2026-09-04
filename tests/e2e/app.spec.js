@@ -59,8 +59,31 @@ test('основная страница и форма добавления ра�
     await page.getByRole('button', { name: 'Закрыть' }).click();
 });
 
+test('меню закрывается и позволяет перейти в справочники и выйти', async ({ page }) => {
+    const menu = page.locator('#navigation');
+    const toggle = menu.locator('summary');
+    await expect(menu.locator('nav')).toBeHidden();
+    await toggle.click();
+    await expect(menu.locator('nav')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu.locator('nav')).toBeHidden();
+    await expect(toggle).toBeFocused();
+    await toggle.click();
+    await page.getByRole('heading', { name: 'Касса', exact: true }).click();
+    await expect(menu.locator('nav')).toBeHidden();
+    await toggle.click();
+    await menu.getByRole('link', { name: 'Справочники' }).click();
+    await expect(page).toHaveURL(/\/references$/);
+    await expect(menu.locator('nav')).toBeHidden();
+    await expect(page.locator('#status')).toContainText('Схема');
+    await toggle.click();
+    await menu.getByRole('button', { name: 'Выйти' }).click();
+    await expect(page).toHaveURL(/\/login$/);
+});
+
 test('ссылка на журнал соответствует праву и журнал открывается', async ({ page }) => {
     const me = await (await page.request.get('/api/me')).json();
+    await page.locator('#navigation > summary').click();
     const link = page.locator('#audit-link');
     if (!me.can_view_protected) {
         await expect(link).toBeHidden();
@@ -79,10 +102,24 @@ test('пользователь без права защищённых опера
     expect((await (await page.request.get('/api/me')).json()).can_view_protected).toBe(false);
     expect((await page.goto('/audit')).status()).toBe(403);
     expect((await page.goto('/users')).status()).toBe(403);
+    await page.goto('/references');
+    await expect(page.locator('#reference-list option')).not.toHaveCount(0);
+    await page.locator('#navigation > summary').click();
+    await expect(page.locator('#audit-link')).toBeHidden();
+    await expect(page.locator('#users-link')).toBeHidden();
+    await expect(page.locator('#new-reference')).toBeHidden();
+    await expect(page.locator('#reference-form')).toBeHidden();
+    await page.locator('#reference-type').selectOption('operation_tree');
+    await expect(page.locator('#reference-hierarchy')).toBeVisible();
+    for (const button of await page.locator('[data-add-hierarchy], [data-edit-hierarchy]').all()) {
+        await expect(button).toBeHidden();
+    }
+
 });
 
 test('ссылка на управление пользователями соответствует праву', async ({ page }) => {
     const me = await (await page.request.get('/api/me')).json();
+    await page.locator('#navigation > summary').click();
     const link = page.locator('#users-link');
     if (!me.can_view_protected) {
         await expect(link).toBeHidden();

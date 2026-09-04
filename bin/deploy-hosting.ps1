@@ -34,6 +34,7 @@ try {
 
 $uploads = @(
     @{ Local = (Join-Path $project 'src\app.php'); Remote = 'src/app.php' },
+    @{ Local = (Join-Path $project 'src\navigation.php'); Remote = 'src/navigation.php' },
     @{ Local = (Join-Path $project 'bin\create-user.php'); Remote = 'bin/create-user.php' },
     @{ Local = (Join-Path $project 'bin\prune-audit-log.php'); Remote = 'bin/prune-audit-log.php' }
 )
