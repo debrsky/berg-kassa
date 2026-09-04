@@ -539,8 +539,8 @@ function filters(bool $withPeriod = true, bool $canViewProtected = false): array
         'include_protected' => $canViewProtected && ($_GET['include_protected'] ?? '0') === '1',
     ];
     if ($withPeriod) {
-        $values['from_date'] = dateParameter('from_date', $today->modify('-29 days')->format('Y-m-d'));
-        $values['to_date'] = dateParameter('to_date', $today->format('Y-m-d'));
+        $values['from_date'] = (($_GET['all_time'] ?? '0') === '1' || ($_GET['from_date'] ?? null) === '') ? '-infinity' : dateParameter('from_date', $today->modify('-29 days')->format('Y-m-d'));
+        $values['to_date'] = (($_GET['all_time'] ?? '0') === '1' || ($_GET['to_date'] ?? null) === '') ? 'infinity' : dateParameter('to_date', $today->format('Y-m-d'));
         if ($values['from_date'] > $values['to_date']) {
             throw new InvalidArgumentException('from_date must not be after to_date');
         }

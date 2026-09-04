@@ -59,6 +59,55 @@ test('основная страница и форма добавления ра�
     await page.getByRole('button', { name: 'Закрыть' }).click();
 });
 
+test('готовые периоды и проверка дат работают', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(2024, 2, 1, 12));
+    const preset = page.getByLabel('Период', { exact: true });
+    const from = page.getByLabel('Начало периода', { exact: true });
+    const to = page.getByLabel('Конец периода', { exact: true });
+    for (const [value, start, end] of [
+        ['today', '2024-03-01', '2024-03-01'],
+        ['yesterday', '2024-02-29', '2024-02-29'],
+        ['week', '2024-02-26', '2024-03-01'],
+        ['month', '2024-03-01', '2024-03-01'],
+        ['previous-month', '2024-02-01', '2024-02-29'],
+        ['last30', '2024-02-01', '2024-03-01'],
+    ]) {
+        await preset.selectOption(value);
+        await expect(from).toHaveValue(start);
+        await expect(to).toHaveValue(end);
+        await expect(page).toHaveURL(new RegExp(`from_date=${start}&to_date=${end}`));
+    }
+    await from.focus();
+    await from.press('Backspace');
+    expect(await from.evaluate(input => input.validity.badInput)).toBe(false);
+    await expect(page).toHaveURL(/from_date=&to_date=2024-03-01/);
+    await page.reload();
+    await expect(from).toHaveValue('');
+    await expect(to).toHaveValue('2024-03-01');
+    await from.fill('2024-02-01');
+    await to.focus();
+    await to.press('Backspace');
+    await expect(page).toHaveURL(/from_date=2024-02-01&to_date=/);
+    await page.reload();
+    await expect(from).toHaveValue('2024-02-01');
+    await expect(to).toHaveValue('');
+    await to.fill('2024-03-01');
+    const validUrl = page.url();
+    await from.fill('2024-03-02');
+    await expect(to).toHaveJSProperty('validationMessage', 'Начало периода не может быть позже конца');
+    expect(page.url()).toBe(validUrl);
+    const summary = page.waitForResponse(response => response.url().includes('/api/action-summary?') && new URL(response.url()).searchParams.get('all_time') === '1');
+    await preset.selectOption('all');
+    expect((await summary).ok()).toBeTruthy();
+    await expect(from).toHaveValue('');
+    await expect(to).toHaveValue('');
+    await page.reload();
+    await expect(preset).toHaveValue('all');
+    await expect(from).toHaveValue('');
+    await page.locator('#reset-filters').click();
+    await expect(page).not.toHaveURL(/all_time/);
+});
+
 test('меню закрывается и позволяет перейти в справочники и выйти', async ({ page }) => {
     const menu = page.locator('#navigation');
     const toggle = menu.locator('summary');

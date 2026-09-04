@@ -223,18 +223,34 @@ for (const tab of tabs) {
 }
 selectOperationsTab(sessionStorage.getItem('operations-tab') === 'expense' ? 'expense' : 'income');
 
-function defaultDates() {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 29);
+function presetDates(preset, now = new Date()) {
+    const start = new Date(now);
+    const end = new Date(now);
+    switch (preset) {
+        case 'all': return ['', ''];
+        case 'yesterday': start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); break;
+        case 'week': start.setDate(start.getDate() - (start.getDay() + 6) % 7); break;
+        case 'month': start.setDate(1); break;
+        case 'previous-month': start.setDate(1); start.setMonth(start.getMonth() - 1); end.setDate(0); break;
+        case 'last30': start.setDate(start.getDate() - 29); break;
+    }
     return [isoDate(start), isoDate(end)];
+}
+
+function defaultDates() {
+    return presetDates('last30');
 }
 
 function restoreFilters() {
     const params = new URLSearchParams(location.search);
     const [from, to] = defaultDates();
-    form.elements.from_date.value = params.get('from_date') || from;
-    form.elements.to_date.value = params.get('to_date') || to;
+    form.elements.from_date.value = params.get('from_date') ?? from;
+    form.elements.to_date.value = params.get('to_date') ?? to;
+    if (params.get('all_time') === '1') {
+        form.elements.from_date.value = '';
+        form.elements.to_date.value = '';
+        document.querySelector('#period-preset').value = 'all';
+    }
     form.elements.include_protected.checked = params.get('include_protected') === '1';
     for (const name of Object.keys(lookupFields)) form.elements[name].dataset.value = params.get(name) || '';
 }
@@ -245,10 +261,11 @@ function filterParams() {
         if (!element.name) continue;
         if (element.type === 'checkbox') {
             if (element.checked) params.set(element.name, '1');
-        } else if (element.value) {
+        } else if (element.value || element.type === 'date') {
             params.set(element.name, element.value);
         }
     }
+    if (!form.elements.from_date.value && !form.elements.to_date.value) params.set('all_time', '1');
     return params;
 }
 
@@ -285,6 +302,10 @@ function refreshCascade(from = 'direction_id') {
 }
 
 async function refresh() {
+    const from = form.elements.from_date;
+    const to = form.elements.to_date;
+    to.setCustomValidity(from.value && to.value && from.value > to.value ? 'Начало периода не может быть позже конца' : '');
+    if (!form.reportValidity()) return;
     requestVersion++;
     const version = requestVersion;
     updateUrl(filterParams());
@@ -520,7 +541,16 @@ document.querySelector('#delete-operation').addEventListener('click', async () =
     }
 });
 
+form.addEventListener('submit', event => event.preventDefault());
 form.addEventListener('change', event => {
+    const preset = document.querySelector('#period-preset');
+    if (event.target === preset) {
+        if (!preset.value) return;
+        [form.elements.from_date.value, form.elements.to_date.value] = presetDates(preset.value);
+    } else if (['from_date', 'to_date'].includes(event.target.name)) {
+        if (!event.target.value) event.target.value = '';
+        preset.value = '';
+    }
     const hierarchy = ['direction_id', 'action_type_id', 'suboperation_l1_id', 'suboperation_l2_id'];
     if (hierarchy.includes(event.target.name)) {
         clearDescendants(event.target.name);

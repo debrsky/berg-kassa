@@ -258,3 +258,43 @@ test('CRUD дерева операций очищает созданные за�
         }
     }
 });
+
+test('за всё время учитывает все операции без начального сальдо', async ({ request }) => {
+    const response = await request.get('/api/action-summary?all_time=1');
+    expect(response.ok()).toBeTruthy();
+    const summary = await response.json();
+    let count = 0;
+    for (const flow of ['income', 'expense']) {
+        const actions = await request.get(`/api/actions?all_time=1&flow=${flow}&include_total=1&limit=1`);
+        expect(actions.ok()).toBeTruthy();
+        count += (await actions.json()).total;
+    }
+    expect(summary.operation_count).toBe(count);
+    for (const row of summary.currencies) {
+        expect(Number(row.opening)).toBe(0);
+        expect(Number(row.closing)).toBeCloseTo(Number(row.income) - Number(row.expense), 2);
+    }
+});
+
+test('пустая граница периода не ограничивает операции с этой стороны', async ({ request }) => {
+    for (const query of ['from_date=&to_date=2024-03-01', 'from_date=2024-03-01&to_date=', 'from_date=&to_date=']) {
+        const response = await request.get(`/api/action-summary?${query}`);
+        expect(response.ok()).toBeTruthy();
+        const summary = await response.json();
+        let count = 0;
+        for (const flow of ['income', 'expense']) {
+            const response = await request.get(`/api/actions?${query}&flow=${flow}&include_total=1&limit=5`);
+            expect(response.ok()).toBeTruthy();
+            const actions = await response.json();
+            count += actions.total;
+            for (const row of actions.items) {
+                if (query.startsWith('from_date=2024')) expect(row.action_date.slice(0, 10) >= '2024-03-01').toBeTruthy();
+                if (query.endsWith('to_date=2024-03-01')) expect(row.action_date.slice(0, 10) <= '2024-03-01').toBeTruthy();
+            }
+        }
+        expect(summary.operation_count).toBe(count);
+        if (query.startsWith('from_date=&')) {
+            for (const row of summary.currencies) expect(Number(row.opening)).toBe(0);
+        }
+    }
+});

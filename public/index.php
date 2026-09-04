@@ -148,8 +148,8 @@ try {
         </div>
     </header>
     <form class="audit-filter" id="audit-filter">
-        <label><span>Начало периода</span><input type="date" name="from_date"></label>
-        <label><span>Конец периода</span><input type="date" name="to_date"></label>
+        <label><span>Начало периода</span><input type="date" name="from_date" aria-label="Начало периода" title="Пустая дата — без ограничения начала периода"></label>
+        <label><span>Конец периода</span><input type="date" name="to_date" aria-label="Конец периода" title="Конечная дата включается в период. Пустая дата — без ограничения конца периода"></label>
         <label><span>Событие</span><select name="event"><option value="">Все события</option></select></label>
         <label><span>Логин</span><input name="login" maxlength="100" autocomplete="off"></label>
         <button type="submit">Применить</button>
@@ -311,12 +311,25 @@ try {
 
     <form class="filter-bar" id="filters">
         <label class="filter-bar__field">
-            <span class="filter-bar__label">Начало периода</span>
-            <input class="filter-bar__control" type="date" name="from_date">
+            <span class="filter-bar__label">Быстрый выбор</span>
+            <select class="filter-bar__control" id="period-preset" aria-label="Период">
+                <option value="">Период ▾</option>
+                <option value="today">Сегодня</option>
+                <option value="yesterday">Вчера</option>
+                <option value="week">Эта неделя</option>
+                <option value="month">Этот месяц</option>
+                <option value="previous-month">Прошлый месяц</option>
+                <option value="last30">Последние 30 дней</option>
+                <option value="all">За всё время</option>
+            </select>
         </label>
         <label class="filter-bar__field">
-            <span class="filter-bar__label">Конец периода</span>
-            <input class="filter-bar__control" type="date" name="to_date">
+            <span class="filter-bar__label">С</span>
+            <input class="filter-bar__control" type="date" name="from_date" aria-label="Начало периода" title="Пустая дата — без ограничения начала периода">
+        </label>
+        <label class="filter-bar__field">
+            <span class="filter-bar__label">По</span>
+            <input class="filter-bar__control" type="date" name="to_date" aria-label="Конец периода" title="Конечная дата включается в период. Пустая дата — без ограничения конца периода">
         </label>
         <label class="filter-bar__field">
             <span class="filter-bar__label">Счёт</span>
