@@ -588,11 +588,12 @@ document.querySelector('#reset-filters').addEventListener('click', () => {
 });
 
 document.querySelector('#logout').addEventListener('click', async () => {
-    await fetchJson('/api/logout', {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': currentUser.csrf_token },
-    });
-    location.replace('/login');
+    try {
+        await fetchJson('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': currentUser.csrf_token } });
+        location.replace('/login');
+    } catch (error) {
+        status.textContent = 'Не удалось выйти. Повторите попытку.';
+    }
 });
 
 document.querySelector('#data-schema').addEventListener('change', async event => {

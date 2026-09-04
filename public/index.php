@@ -111,6 +111,7 @@ try {
     <link rel="stylesheet" href="/css/app.css?v=<?= filemtime(__DIR__ . '/css/app.css') ?>">
 </head>
 <body>
+<noscript><p role="alert">Для работы приложения включите JavaScript и обновите страницу.</p></noscript>
 <?php if ($isLoginPage): ?>
 <main class="login-page">
     <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
@@ -118,7 +119,7 @@ try {
         <p class="login-card__eyebrow">Berg Kassa</p>
         <h1 class="login-card__title">Вход</h1>
         <p class="login-card__subtitle">Введите учётные данные для доступа к операциям.</p>
-        <form class="login-card__form" id="login-form">
+        <form class="login-card__form" id="login-form" method="post" action="/login">
             <label class="login-card__field">
                 <span class="login-card__label">Логин</span>
                 <input class="login-card__control" name="login" autocomplete="username" required autofocus>
@@ -144,7 +145,7 @@ try {
             <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
             <span class="dashboard__user" id="current-user"></span>
             <?php require __DIR__ . '/../src/navigation.php'; ?>
-            <p class="dashboard__status" id="status">Загрузка…</p>
+            <p class="dashboard__status" id="status" role="status">Загрузка…</p>
         </div>
     </header>
     <form class="audit-filter" id="audit-filter">
@@ -178,14 +179,14 @@ try {
             <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
             <span class="dashboard__user" id="current-user"></span>
             <?php require __DIR__ . '/../src/navigation.php'; ?>
-            <p class="dashboard__status" id="status">Загрузка…</p>
+            <p class="dashboard__status" id="status" role="status">Загрузка…</p>
         </div>
     </header>
     <section class="users-manager">
         <div class="audit-log__scroll">
             <table><thead><tr><th>Логин</th><th>Схемы</th><th>Защищённые операции</th><th>Активен</th><th></th></tr></thead><tbody id="user-rows"></tbody></table>
         </div>
-        <form class="reference-manager__form" id="user-form">
+        <form class="reference-manager__form" id="user-form" method="post">
             <input type="hidden" name="id">
             <label class="reference-manager__field"><span>Логин</span><input name="login" maxlength="100" autocomplete="off" required></label>
             <label class="reference-manager__field"><span>Схемы через запятую</span><input name="data_schemas" placeholder="vl, company_2" required></label>
@@ -213,7 +214,7 @@ try {
                 <select class="dashboard__schema" id="data-schema" aria-label="Схема данных"></select>
             </label>
             <?php require __DIR__ . '/../src/navigation.php'; ?>
-            <p class="dashboard__status" id="status">Загрузка…</p>
+            <p class="dashboard__status" id="status" role="status">Загрузка…</p>
         </div>
     </header>
     <section class="reference-manager<?= $pageUser['can_view_protected'] ? '' : ' reference-manager--readonly' ?>">
@@ -258,7 +259,7 @@ try {
                     </section>
                 </div>
             </section>
-            <form class="reference-manager__form" id="reference-form">
+            <form class="reference-manager__form" id="reference-form" method="post">
                 <input type="hidden" name="id">
                 <label class="reference-manager__field" id="reference-parent-field" hidden>
                     <span id="reference-parent-label">Родитель</span>
@@ -305,7 +306,7 @@ try {
                 <select class="dashboard__schema" id="data-schema" aria-label="Схема данных"></select>
             </label>
             <?php require __DIR__ . '/../src/navigation.php'; ?>
-            <p class="dashboard__status" id="status">Загрузка…</p>
+            <p class="dashboard__status" id="status" role="status">Загрузка…</p>
         </div>
     </header>
 
@@ -424,8 +425,8 @@ try {
     </section>
 
 </main>
-<dialog class="operation-dialog" id="operation-dialog">
-    <form class="operation-form" id="operation-form">
+<dialog class="operation-dialog" id="operation-dialog" aria-labelledby="operation-form-title">
+    <form class="operation-form" id="operation-form" method="post">
         <header class="operation-form__header">
             <h2 class="operation-form__title" id="operation-form-title">Новая операция</h2>
             <button class="operation-form__close" type="button" data-close-dialog aria-label="Закрыть">×</button>

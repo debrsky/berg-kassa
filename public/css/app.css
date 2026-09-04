@@ -578,7 +578,7 @@
 
 .operation-panel__columns {
     min-width: 36rem;
-    color: var(--color-text-muted);
+    color: var(--color-text);
     background: var(--color-surface-muted);
     font-size: 0.72rem;
     font-weight: var(--font-weight-bold);

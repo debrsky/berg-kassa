@@ -53,6 +53,9 @@ async function load() {
 
 form.addEventListener('submit', async event => {
     event.preventDefault();
+    const submit = form.querySelector('[type=submit]');
+    if (submit.disabled) return;
+    submit.disabled = true;
     const id = form.elements.id.value;
     const data = {
         login: form.elements.login.value,
@@ -73,13 +76,19 @@ form.addEventListener('submit', async event => {
         message.textContent = 'Сохранено';
     } catch (error) {
         message.textContent = error.message;
+    } finally {
+        submit.disabled = false;
     }
 });
 
 document.querySelector('#new-user').addEventListener('click', () => edit());
 document.querySelector('#logout').addEventListener('click', async () => {
-    await fetchJson('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
-    location.replace('/login');
+    try {
+        await fetchJson('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
+        location.replace('/login');
+    } catch (error) {
+        status.textContent = 'Не удалось выйти. Повторите попытку.';
+    }
 });
 
 (async () => {

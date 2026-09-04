@@ -90,8 +90,12 @@ document.querySelector('#audit-reset').addEventListener('click', () => {
 previous.addEventListener('click', () => { offset = Math.max(0, offset - limit); load(); });
 next.addEventListener('click', () => { offset += limit; load(); });
 document.querySelector('#logout').addEventListener('click', async () => {
-    await fetchJson('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
-    location.replace('/login');
+    try {
+        await fetchJson('/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
+        location.replace('/login');
+    } catch (error) {
+        status.textContent = 'Не удалось выйти. Повторите попытку.';
+    }
 });
 
 (async () => {

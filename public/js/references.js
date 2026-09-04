@@ -209,6 +209,9 @@ for (const column of hierarchyColumns) {
 
 referenceForm.addEventListener('submit', async event => {
     event.preventDefault();
+    const submit = referenceForm.querySelector('[type=submit]');
+    if (submit.disabled) return;
+    submit.disabled = true;
     const type = currentType();
     const config = referenceConfigs[type];
     const id = referenceForm.querySelector('[name="id"]').value;
@@ -235,6 +238,8 @@ referenceForm.addEventListener('submit', async event => {
         referenceMessage.textContent = 'Сохранено';
     } catch (error) {
         referenceMessage.textContent = error.message;
+    } finally {
+        submit.disabled = false;
     }
 });
 

@@ -29,6 +29,28 @@ test('тема переключается и сохраняется', async ({ p
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'system');
 });
 
+test('без JavaScript вход не отправляет пароль в URL', async ({ browser, baseURL }) => {
+    const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+    const page = await context.newPage();
+    try {
+        await page.goto('/login');
+        await expect(page.locator('noscript [role=alert]')).toContainText('включите JavaScript');
+        await page.getByLabel('Логин').fill('audit-dummy');
+        await page.getByLabel('Пароль').fill('dummy-password');
+        let sent;
+        await page.route('**/login', async route => {
+            sent = route.request();
+            await route.fulfill({ status: 200, body: 'Проверено' });
+        });
+        await page.getByRole('button', { name: 'Войти' }).click();
+        await expect.poll(() => sent?.method()).toBe('POST');
+        expect(new URL(sent.url()).search).toBe('');
+        expect(sent.postData()).toContain('password=dummy-password');
+    } finally {
+        await context.close();
+    }
+});
+
 test.describe('с авторизацией', () => {
 test.beforeEach(async ({ page }) => {
     test.skip(!login || !password, 'Задайте E2E_USER и E2E_PASSWORD');
@@ -39,6 +61,83 @@ test.beforeEach(async ({ page }) => {
     await expect(page).not.toHaveURL(/\/login$/);
     await page.waitForLoadState('load');
     await expect(page.locator('#status')).toContainText('Найдено');
+});
+
+test('ошибка выхода объявляется и позволяет повторить выход', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    for (const path of ['/', '/audit', '/users']) {
+        await page.goto(path);
+        await expect(page.locator('#status')).toContainText(/Найдено|Событий|Пользователей/);
+        await page.route('**/api/logout', route => route.abort());
+        await page.locator('#navigation > summary').click();
+        await page.locator('#logout').click();
+        await expect(page.locator('#status')).toHaveAttribute('role', 'status');
+        await expect(page.locator('#status')).toHaveText('Не удалось выйти. Повторите попытку.');
+        await page.unroute('**/api/logout');
+    }
+    expect(errors).toEqual([]);
+    await page.locator('#navigation > summary').click();
+    await page.locator('#logout').click();
+    await expect(page).toHaveURL(/\/login$/);
+});
+
+test('контраст заголовков операций достаточен в обеих темах', async ({ page }) => {
+    for (const theme of ['light', 'dark']) {
+        const ratio = await page.evaluate(theme => {
+            document.documentElement.dataset.theme = theme;
+            const style = getComputedStyle(document.querySelector('.operation-panel__columns'));
+            const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => {
+                v /= 255;
+                return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+            }).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+            const a = luminance(style.color), b = luminance(style.backgroundColor);
+            return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        }, theme);
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+    }
+});
+
+test('сохранение справочника и пользователя блокирует повторный запрос', async ({ page }) => {
+    for (const kind of ['references', 'users']) {
+        await page.goto('/' + kind);
+        await expect(page.locator('#status')).toContainText(/Схема|Пользователей/);
+        const form = page.locator(kind === 'users' ? '#user-form' : '#reference-form');
+        if (kind === 'users') {
+            await page.locator('#new-user').click();
+            await form.locator('[name=login]').fill('test-no-write');
+            await form.locator('[name=data_schemas]').fill('vl');
+            await form.locator('[name=password]').fill('test-no-write-password');
+        } else {
+            await page.locator('#reference-type').selectOption('currencies');
+            await expect(page.locator('#reference-message')).not.toHaveText('Загрузка…');
+            await page.locator('#new-reference').click();
+            await form.locator('[name=name]').fill('test-no-write');
+        }
+        const url = kind === 'users' ? '**/api/users' : '**/api/references/currencies';
+        let release;
+        const pending = new Promise(resolve => release = resolve);
+        let count = 0;
+        await page.route(url, async route => {
+            if (route.request().method() !== 'POST') return route.continue();
+            count++;
+            await pending;
+            await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Тестовая ошибка"}' });
+        });
+        const submit = form.locator('[type=submit]');
+        await submit.click();
+        await expect.poll(() => count).toBe(1);
+        await expect(submit).toBeDisabled();
+        await form.evaluate(element => element.requestSubmit());
+        release();
+        await expect(submit).toBeEnabled();
+        await expect(form.getByRole('status')).toHaveText('Тестовая ошибка');
+        expect(count).toBe(1);
+        await submit.click();
+        await expect.poll(() => count).toBe(2);
+        await expect(submit).toBeEnabled();
+        await page.unroute(url);
+    }
 });
 
 test('основная страница и форма добавления работают', async ({ page }) => {
@@ -56,6 +155,7 @@ test('основная страница и форма добавления ра�
     await expect(addIncome).toBeEnabled();
     await addIncome.click();
     await expect(page.locator('#operation-dialog')).toBeVisible();
+    await expect(page.locator('#operation-dialog')).toHaveAccessibleName(/Новая операция|Редактирование операции/);
     await expect(page.locator('#operation-form [name="is_black"]')).toBeVisible({ visible: me.can_view_protected });
     await expect(page.locator('#operation-form [name="is_debit"]')).toHaveValue('true');
     await expect(page.locator('#operation-form [name="currency_id"] option:checked')).toHaveText('р.');
