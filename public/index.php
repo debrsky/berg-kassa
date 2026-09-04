@@ -415,14 +415,7 @@ try {
         </section>
     </section>
 
-    <section class="summary" aria-live="polite">
-        <div class="summary__header">
-            <div>
-                <p class="summary__eyebrow">По выбранному периоду</p>
-                <h2 class="summary__title">Итоги и сальдо</h2>
-            </div>
-            <span class="summary__count" id="summary-count"></span>
-        </div>
+    <section class="summary" aria-label="Итоги и сальдо" aria-live="polite">
         <div class="summary__table-wrap" id="currency-summary"></div>
     </section>
 

@@ -322,7 +322,6 @@ async function refresh() {
 }
 
 function renderSummary(data) {
-    document.querySelector('#summary-count').textContent = `${Number(data.operation_count).toLocaleString('ru-RU')} операций`;
     document.querySelector('#currency-summary').innerHTML = summaryTable(data.currencies);
 }
 
