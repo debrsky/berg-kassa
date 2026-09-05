@@ -102,6 +102,17 @@ function currentUser(): ?array
     $user['can_view_protected'] = (bool) $user['can_view_protected'];
     $user['data_schemas'] = json_decode($user['data_schemas_json'], true, flags: JSON_THROW_ON_ERROR);
     unset($user['data_schemas_json']);
+    if ($user['can_view_protected']) {
+        $user['data_schemas'] = db()->query(<<<'SQL'
+            SELECT n.nspname
+            FROM pg_namespace n
+            WHERE EXISTS (
+                SELECT 1 FROM information_schema.tables t
+                WHERE t.table_schema = n.nspname AND t.table_name = 'actions'
+            )
+            ORDER BY n.nspname
+        SQL)->fetchAll(PDO::FETCH_COLUMN);
+    }
     if (!$user['data_schemas']) {
         $_SESSION = [];
         return null;
@@ -292,6 +303,7 @@ function me(array $user): never
 {
     $unavailable = array_values(array_filter($user['data_schemas'], fn (string $schema) => !schemaExists($schema)));
     jsonResponse([
+        'id' => $user['id'],
         'login' => $user['login'],
         'data_schema' => $user['data_schema'],
         'data_schemas' => $user['data_schemas'],
@@ -371,10 +383,34 @@ function users(array $actor, ?int $id = null): never
         }
         jsonResponse(['items' => $items]);
     }
-    if (($id === null && $_SERVER['REQUEST_METHOD'] !== 'POST') || ($id !== null && $_SERVER['REQUEST_METHOD'] !== 'PUT')) {
+    if (($id === null && $_SERVER['REQUEST_METHOD'] !== 'POST') || ($id !== null && !in_array($_SERVER['REQUEST_METHOD'], ['PUT', 'DELETE'], true))) {
         jsonResponse(['error' => 'Method not allowed'], 405);
     }
     requireCsrf($actor);
+    if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+        if ($id === (int) $actor['id']) {
+            throw new InvalidArgumentException('Нельзя удалить собственную учётную запись');
+        }
+        $pdo = db();
+        $pdo->beginTransaction();
+        try {
+            $statement = $pdo->prepare('SELECT id, login, data_schema, can_view_protected, is_active FROM auth.users WHERE id = :id FOR UPDATE');
+            $statement->execute(['id' => $id]);
+            $old = $statement->fetch();
+            if (!$old) {
+                $pdo->rollBack();
+                jsonResponse(['error' => 'User not found'], 404);
+            }
+            $statement = $pdo->prepare('DELETE FROM auth.users WHERE id = :id');
+            $statement->execute(['id' => $id]);
+            auditEvent('user.deleted', $actor, 'users', $id, ['old' => $old], pdo: $pdo);
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $error;
+        }
+        jsonResponse(['ok' => true]);
+    }
     $body = json_decode(file_get_contents('php://input'), true, flags: JSON_THROW_ON_ERROR);
     $login = trim((string) ($body['login'] ?? ''));
     $schemas = array_values(array_unique(array_map('trim', is_array($body['data_schemas'] ?? null) ? $body['data_schemas'] : [])));
@@ -389,7 +425,7 @@ function users(array $actor, ?int $id = null): never
         throw new InvalidArgumentException('Password must contain at least 12 characters');
     }
     if ($id === (int) $actor['id'] && (!$protected || !$active)) {
-        throw new InvalidArgumentException('Нельзя отозвать собственный защищённый доступ или отключить свою учётную запись');
+        throw new InvalidArgumentException('Нельзя отозвать собственную административную роль или отключить свою учётную запись');
     }
     $duplicate = db()->prepare('SELECT 1 FROM auth.users WHERE lower(login) = lower(:login)' . ($id === null ? '' : ' AND id <> :id'));
     $duplicate->execute(array_filter(['login' => $login, 'id' => $id], fn ($value) => $value !== null));

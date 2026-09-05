@@ -186,14 +186,14 @@ try {
     </header>
     <section class="users-manager">
         <div class="audit-log__scroll">
-            <table><thead><tr><th>Логин</th><th>Схемы</th><th>Защищённые операции</th><th>Активен</th><th></th></tr></thead><tbody id="user-rows"></tbody></table>
+            <table><thead><tr><th>Логин</th><th>Схемы</th><th>Администратор</th><th>Активен</th><th></th></tr></thead><tbody id="user-rows"></tbody></table>
         </div>
         <form class="reference-manager__form" id="user-form" method="post">
             <input type="hidden" name="id">
             <label class="reference-manager__field"><span>Логин</span><input name="login" maxlength="100" autocomplete="off" required></label>
             <label class="reference-manager__field"><span>Схемы через запятую</span><input name="data_schemas" placeholder="vl, company_2" required></label>
             <label class="reference-manager__field"><span>Пароль <small id="password-hint">(обязателен для нового пользователя)</small></span><input type="password" name="password" minlength="12" autocomplete="new-password"></label>
-            <label><input type="checkbox" name="can_view_protected"> Доступ к защищённым операциям</label>
+            <label><input type="checkbox" name="can_view_protected"> Администратор</label>
             <label><input type="checkbox" name="is_active" checked> Активен</label>
             <p class="reference-manager__message" id="user-message" role="status"></p>
             <div class="reference-manager__actions"><button type="button" id="new-user">Новый</button><button class="reference-manager__save" type="submit">Сохранить</button></div>

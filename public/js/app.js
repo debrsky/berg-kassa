@@ -77,11 +77,7 @@ function restoreFilters() {
     form.elements.memo.value = params.get('memo') ?? '';
     form.elements.from_date.value = params.get('from_date') ?? from;
     form.elements.to_date.value = params.get('to_date') ?? to;
-    if (params.get('all_time') === '1') {
-        form.elements.from_date.value = '';
-        form.elements.to_date.value = '';
-        document.querySelector('#period-preset').value = 'all';
-    }
+    if (!form.elements.from_date.value && !form.elements.to_date.value) document.querySelector('#period-preset').value = 'all';
     form.elements.include_protected.checked = params.get('include_protected') === '1';
     for (const name of Object.keys(lookupFields)) form.elements[name].dataset.value = params.get(name) || '';
 }
@@ -96,7 +92,6 @@ function filterParams() {
             params.set(element.name, element.value);
         }
     }
-    if (!form.elements.from_date.value && !form.elements.to_date.value) params.set('all_time', '1');
     return params;
 }
 

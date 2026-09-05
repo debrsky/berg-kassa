@@ -218,7 +218,10 @@ test('готовые периоды и проверка дат работают'
     await from.fill('2024-03-02');
     await expect(to).toHaveJSProperty('validationMessage', 'Начало периода не может быть позже конца');
     expect(page.url()).toBe(validUrl);
-    const summary = page.waitForResponse(response => response.url().includes('/api/action-summary?') && new URL(response.url()).searchParams.get('all_time') === '1');
+    const summary = page.waitForResponse(response => {
+        const params = new URL(response.url()).searchParams;
+        return response.url().includes('/api/action-summary?') && params.get('from_date') === '' && params.get('to_date') === '';
+    });
     await preset.selectOption('all');
     expect((await summary).ok()).toBeTruthy();
     await expect(from).toHaveValue('');
@@ -227,7 +230,6 @@ test('готовые периоды и проверка дат работают'
     await expect(preset).toHaveValue('all');
     await expect(from).toHaveValue('');
     await page.locator('#reset-filters').click();
-    await expect(page).not.toHaveURL(/all_time/);
 });
 
 test('меню закрывается и позволяет перейти в справочники и выйти', async ({ page }) => {
@@ -326,15 +328,22 @@ test('фильтр сохраняется в URL и восстанавливае
 });
 
 test('каскад не предлагает несовместимые уровни', async ({ page }) => {
+    const lookups = await (await page.request.get('/api/lookups')).json();
+    const actionRecord = lookups.action_types.find(item => item.direction_id);
+    test.skip(!actionRecord, 'Нет связанной операции для проверки');
     const filters = page.locator('#filters');
-    await filters.locator('[name="direction_id"]').selectOption({ label: 'Гр' });
+    await filters.locator('[name="direction_id"]').selectOption(String(actionRecord.direction_id));
     const action = filters.locator('[name="action_type_id"]');
     await expect(action).toBeEnabled();
-    await action.selectOption({ label: '(приходники)' });
+    await action.selectOption(String(actionRecord.id));
     const sub1 = filters.locator('[name="suboperation_l1_id"]');
     await expect(sub1).toBeEnabled();
-    const actionId = await action.inputValue();
-    expect(actionId).not.toBe('');
+    expect(await action.inputValue()).toBe(String(actionRecord.id));
+    const actual = await action.locator('option').evaluateAll(options => options.map(option => option.value).filter(Boolean).sort());
+    const expected = lookups.action_types
+        .filter(item => String(item.direction_id) === String(actionRecord.direction_id))
+        .map(item => String(item.id)).sort();
+    expect(actual).toEqual(expected);
 });
 
 test('проводка раскрывается и фильтрует подоперации 2', async ({ page }) => {

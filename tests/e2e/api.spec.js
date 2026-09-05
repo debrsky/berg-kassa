@@ -108,7 +108,7 @@ test('CRUD операции очищает созданные данные', asy
         expect(response.status()).toBe(201);
         ({ id, posting_id: postingId } = await response.json());
         expect(postingId).toBeTruthy();
-        const query = new URLSearchParams({ all_time: '1', memo: body.memo.toLowerCase(), account_id: String(account.id) });
+        const query = new URLSearchParams({ from_date: '', to_date: '', memo: body.memo.toLowerCase(), account_id: String(account.id) });
         for (const [flow, expectedId] of [['income', id], ['expense', postingId]]) {
             const result = await request.get(`/api/actions?${query}&flow=${flow}&include_total=1`);
             expect(result.ok()).toBeTruthy();
@@ -233,7 +233,7 @@ test('пользователь без права защищённых опера
     expect((await request.get('/api/users')).status()).toBe(403);
 });
 
-test('управление пользователями доступно только с защищённым правом', async ({ request }) => {
+test('управление пользователями доступно только администратору', async ({ request }) => {
     const me = await (await request.get('/api/me')).json();
     const response = await request.get('/api/users');
     if (!me.can_view_protected) {
@@ -244,6 +244,31 @@ test('управление пользователями доступно тол�
     const data = await response.json();
     expect(Array.isArray(data.items)).toBeTruthy();
     expect(data.items.every(item => !('password_hash' in item))).toBeTruthy();
+});
+
+test('администратор создаёт и удаляет пользователя, логин не зависит от регистра', async ({ request }) => {
+    const me = await (await request.get('/api/me')).json();
+    test.skip(!me.can_view_protected, 'Требуется администратор');
+    const login = `e2e-delete-${Date.now()}`;
+    const body = {
+        login,
+        data_schemas: [me.data_schema],
+        password: 'e2e-delete-password',
+        can_view_protected: false,
+        is_active: true,
+    };
+    const created = await request.post('/api/users', { headers: { 'X-CSRF-Token': csrf }, data: body });
+    expect(created.status()).toBe(201);
+    const id = (await created.json()).id;
+    try {
+        const duplicate = await request.post('/api/users', {
+            headers: { 'X-CSRF-Token': csrf }, data: { ...body, login: login.toUpperCase() },
+        });
+        expect(duplicate.status()).toBe(409);
+        expect((await request.delete(`/api/users/${me.id}`, { headers: { 'X-CSRF-Token': csrf } })).status()).toBe(400);
+    } finally {
+        expect((await request.delete(`/api/users/${id}`, { headers: { 'X-CSRF-Token': csrf } })).ok()).toBeTruthy();
+    }
 });
 
 test('CRUD дерева операций очищает созданные записи', async ({ request }) => {
@@ -275,12 +300,12 @@ test('CRUD дерева операций очищает созданные за�
 });
 
 test('за всё время учитывает все операции без начального сальдо', async ({ request }) => {
-    const response = await request.get('/api/action-summary?all_time=1');
+    const response = await request.get('/api/action-summary?from_date=&to_date=');
     expect(response.ok()).toBeTruthy();
     const summary = await response.json();
     let count = 0;
     for (const flow of ['income', 'expense']) {
-        const actions = await request.get(`/api/actions?all_time=1&flow=${flow}&include_total=1&limit=1`);
+        const actions = await request.get(`/api/actions?from_date=&to_date=&flow=${flow}&include_total=1&limit=1`);
         expect(actions.ok()).toBeTruthy();
         count += (await actions.json()).total;
     }
@@ -336,7 +361,7 @@ test('большие суммы сохраняются и сальдо вычи�
             expect(response.status()).toBe(201);
             ids.push((await response.json()).id);
         }
-        const params = new URLSearchParams({ memo, all_time: '1' });
+        const params = new URLSearchParams({ memo, from_date: '', to_date: '' });
         const summary = await (await request.get(`/api/action-summary?${params}`)).json();
         expect(summary.currencies[0].income).toBe('99999999999999999.99');
         expect(summary.currencies[0].current).toBe('0.01');
@@ -386,7 +411,7 @@ for (const method of ['PUT', 'DELETE']) {
             child.stdin.end('commit\n');
             expect((await finished)[0], errors).toBe(0);
             expect((await pending).status()).toBe(method === 'PUT' ? 403 : 404);
-            const result = await (await request.get(`/api/actions?all_time=1&include_protected=1&flow=income&memo=${body.memo}`)).json();
+            const result = await (await request.get(`/api/actions?from_date=&to_date=&include_protected=1&flow=income&memo=${body.memo}`)).json();
             expect(result.items).toHaveLength(1);
             expect(result.items[0].is_black).toBe(true);
         } finally {

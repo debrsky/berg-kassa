@@ -4,6 +4,7 @@ const status = document.querySelector('#status');
 const message = document.querySelector('#user-message');
 let csrf;
 let users = [];
+let currentUser;
 
 function edit(user = null) {
     form.reset();
@@ -26,11 +27,28 @@ function render() {
             row.append(cell);
         }
         const action = document.createElement('td');
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.textContent = 'Изменить';
-        button.addEventListener('click', () => edit(user));
-        action.append(button);
+        const editButton = document.createElement('button');
+        editButton.type = 'button';
+        editButton.textContent = 'Изменить';
+        editButton.addEventListener('click', () => edit(user));
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.textContent = 'Удалить';
+        deleteButton.disabled = user.id === currentUser.id;
+        deleteButton.addEventListener('click', async () => {
+            if (!confirm(`Удалить пользователя «${user.login}»?`)) return;
+            let deleted = false;
+            try {
+                await fetchJson(`/api/users/${user.id}`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrf } });
+                deleted = true;
+                message.textContent = 'Удалено. Обновление списка…';
+                await load();
+                message.textContent = 'Удалено';
+            } catch (error) {
+                message.textContent = deleted ? `Удалено, но список не обновился. ${error.message}` : error.message;
+            }
+        });
+        action.append(editButton, deleteButton);
         row.append(action);
         return row;
     }));
@@ -82,9 +100,9 @@ bindLogout(() => csrf);
 
 (async () => {
     try {
-        const user = await fetchJson('/api/me');
-        csrf = user.csrf_token;
-        document.querySelector('#current-user').textContent = user.login;
+        currentUser = await fetchJson('/api/me');
+        csrf = currentUser.csrf_token;
+        document.querySelector('#current-user').textContent = currentUser.login;
         edit();
         await load();
     } catch (error) {
