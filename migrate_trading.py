@@ -6,11 +6,6 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
-import pymssql
-import psycopg
-from psycopg import sql
-
-
 @dataclass(frozen=True)
 class Table:
     source: str
@@ -169,13 +164,29 @@ def required(name: str) -> str:
     return value
 
 
-def mssql_connection():
+def migrations() -> list[tuple[str, str]]:
+    result = []
+    for item in required("MSSQL_MIGRATIONS").split(","):
+        parts = [part.strip() for part in item.split(":")]
+        if len(parts) != 2 or not all(parts):
+            raise SystemExit(
+                "Invalid MSSQL_MIGRATIONS; expected database:schema pairs"
+            )
+        result.append((parts[0], parts[1]))
+    if len({schema for _, schema in result}) != len(result):
+        raise SystemExit("Invalid MSSQL_MIGRATIONS; target schemas must be unique")
+    return result
+
+
+def mssql_connection(database: str):
+    import pymssql
+
     return pymssql.connect(
         server=required("MSSQL_HOST"),
         port=int(required("MSSQL_PORT")),
         user=required("MSSQL_USER"),
         password=required("MSSQL_PASSWORD"),
-        database="trading",
+        database=database,
         tds_version="7.0",
         charset="cp1251",
         login_timeout=10,
@@ -184,6 +195,8 @@ def mssql_connection():
 
 
 def pg_connection():
+    import psycopg
+
     return psycopg.connect(
         host=required("LOCAL_PGSQL_HOST"),
         port=int(required("LOCAL_PGSQL_PORT")),
@@ -193,26 +206,54 @@ def pg_connection():
     )
 
 
-def pg_schema() -> str:
-    return required("LOCAL_PGSQL_SCHEMA")
+def select_schema(cursor, schema: str) -> None:
+    from psycopg import sql
 
-
-def select_schema(cursor) -> None:
     cursor.execute(
         sql.SQL("SET LOCAL search_path TO {}, pg_catalog").format(
-            sql.Identifier(pg_schema())
+            sql.Identifier(schema)
         )
     )
 
 
-def read_source() -> dict[str, list[tuple]]:
+def read_source(database: str) -> dict[str, list[tuple]]:
     data: dict[str, list[tuple]] = {}
-    with mssql_connection() as connection:
+    with mssql_connection(database) as connection:
         cursor = connection.cursor()
         for table in TABLES:
             cursor.execute(f"SELECT {table.select} FROM [{table.source}] ORDER BY ID")
             data[table.target] = list(cursor.fetchall())
     return data
+
+
+def remove_unused_references(data: dict[str, list[tuple]]) -> dict[str, int]:
+    actions = data["actions"]
+    used = {
+        "accounts": {row[1] for row in actions},
+        "suboperations_l2": {row[2] for row in actions},
+        "currencies": {row[3] for row in actions},
+    }
+
+    data["accounts"] = [row for row in data["accounts"] if row[0] in used["accounts"]]
+    used["currencies"].update(row[2] for row in data["accounts"])
+    data["suboperations_l2"] = [
+        row for row in data["suboperations_l2"] if row[0] in used["suboperations_l2"]
+    ]
+    for child, parent, fk_index in (
+        ("suboperations_l2", "suboperations_l1", 1),
+        ("suboperations_l1", "action_types", 1),
+        ("action_types", "directions", 1),
+    ):
+        parent_ids = {row[fk_index] for row in data[child] if row[fk_index] is not None}
+        data[parent] = [row for row in data[parent] if row[0] in parent_ids]
+    data["currencies"] = [
+        row for row in data["currencies"] if row[0] in used["currencies"]
+    ]
+    data["currency_rates"] = [
+        row for row in data["currency_rates"] if row[1] in used["currencies"]
+    ]
+
+    return {table.target: len(data[table.target]) for table in TABLES}
 
 
 def add_placeholders(data: dict[str, list[tuple]]) -> dict[str, list[int]]:
@@ -314,30 +355,42 @@ def validate(cursor, data: dict[str, list[tuple]]) -> None:
             )
 
 
-def check(data: dict[str, list[tuple]], placeholders: dict[str, list[int]]) -> None:
+def check(
+    data: dict[str, list[tuple]],
+    placeholders: dict[str, list[int]],
+    database: str,
+    schema: str,
+) -> None:
     with pg_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute("SELECT current_database(), current_setting('server_version')")
-            database, version = cursor.fetchone()
-    print(f"PostgreSQL {version}, database={database}, schema={pg_schema()}")
+            pg_database, version = cursor.fetchone()
+    print(
+        f"MSSQL database={database} -> PostgreSQL {version}, "
+        f"database={pg_database}, schema={schema}"
+    )
     for table in TABLES:
         print(f"{table.source:18} -> {table.target:18} {len(data[table.target]):>7} rows")
     for table, ids in placeholders.items():
         print(f"placeholder {table}: {', '.join(map(str, ids))}")
 
 
-def apply(data: dict[str, list[tuple]], placeholders: dict[str, list[int]]) -> None:
+def apply(
+    data: dict[str, list[tuple]], placeholders: dict[str, list[int]], schema: str
+) -> None:
+    from psycopg import sql
+
     with pg_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
                 sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
-                    sql.Identifier(pg_schema())
+                    sql.Identifier(schema)
                 )
             )
-            select_schema(cursor)
+            select_schema(cursor, schema)
             cursor.execute(
                 "SELECT pg_advisory_xact_lock(hashtext(%s))",
-                (f"{required('LOCAL_PGSQL_DATABASE')}.{pg_schema()}.migration",),
+                (f"{required('LOCAL_PGSQL_DATABASE')}.{schema}.migration",),
             )
             cursor.execute(DDL)
             cursor.execute(
@@ -367,12 +420,20 @@ def main() -> None:
     )
     args = parser.parse_args()
     load_env(args.env)
-    data = read_source()
-    placeholders = add_placeholders(data)
-    if args.apply:
-        apply(data, placeholders)
-    else:
-        check(data, placeholders)
+    for database, schema in migrations():
+        print(f"\n{database} -> {schema}")
+        data = read_source(database)
+        source_counts = {table.target: len(data[table.target]) for table in TABLES}
+        kept_counts = remove_unused_references(data)
+        for table in TABLES:
+            removed = source_counts[table.target] - kept_counts[table.target]
+            if removed:
+                print(f"unused {table.target}: {removed} rows skipped")
+        placeholders = add_placeholders(data)
+        if args.apply:
+            apply(data, placeholders, schema)
+        else:
+            check(data, placeholders, database, schema)
 
 
 if __name__ == "__main__":

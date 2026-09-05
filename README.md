@@ -11,7 +11,7 @@ $password = Read-Host 'Пароль пользователя' -AsSecureString
 $env:NEW_USER_PASSWORD = [Net.NetworkCredential]::new('', $password).Password
 .\.tools\php\php.exe bin\create-user.php admin vl,company_2 1
 Remove-Item Env:NEW_USER_PASSWORD
-.\php.cmd -S 127.0.0.1:8080 -t public public\router.php
+.\start-local.cmd
 ```
 
 После запуска откройте <http://127.0.0.1:8080>.
@@ -35,7 +35,12 @@ Remove-Item Env:NEW_USER_PASSWORD
 ```
 
 Приложение читает подключение к PostgreSQL из `.env`. Для повторного импорта
-данных из MSSQL:
+данных из баз MSSQL в соответствующие схемы PostgreSQL задайте пары в нужном
+порядке и запустите мигратор:
+
+```dotenv
+MSSQL_MIGRATIONS=trading:vl,khb_trading:khb,uss_trading:uss
+```
 
 ```powershell
 python -m pip install -r requirements.txt
