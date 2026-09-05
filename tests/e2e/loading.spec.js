@@ -24,6 +24,15 @@ test('фильтры ждут справочники, NULL отличается 
     await expect(page.locator('#filters [name=from_date]')).toHaveValue('2026-01-01');
     await expect(page.locator('#income-panel [data-operation-id="1"] .operation-row__amount')).toHaveText('— р.');
     await expect(page.locator('#income-panel [data-operation-id="2"] .operation-row__amount')).toHaveText('0,00 р.');
+    if ((page.viewportSize()?.width ?? 1000) <= 479) {
+        const card = page.locator('#income-panel [data-operation-id="1"]');
+        expect((await card.boundingBox()).height).toBe(128);
+        await expect(card).not.toHaveAttribute('role', 'button');
+        const date = card.locator('.operation-row__date');
+        expect((await date.boundingBox()).height).toBeGreaterThanOrEqual(44);
+        await date.click();
+        await expect(page.locator('#operation-dialog')).toBeVisible();
+    }
 });
 
 for (const fail of [false, true]) {

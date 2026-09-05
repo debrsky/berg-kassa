@@ -5,6 +5,11 @@ const password = process.env.E2E_PASSWORD;
 const restrictedLogin = process.env.E2E_RESTRICTED_USER;
 const restrictedPassword = process.env.E2E_RESTRICTED_PASSWORD;
 
+async function expandFilters(page) {
+    const toggle = page.locator('#filter-toggle');
+    if (await toggle.isVisible() && await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+}
+
 test('неавторизованного пользователя перенаправляет на вход', async ({ page }) => {
     await page.goto('/');
     await expect(page).toHaveURL('/login');
@@ -143,6 +148,7 @@ test('сохранение справочника и пользователя б
 test('основная страница и форма добавления работают', async ({ page }) => {
     const me = await (await page.request.get('/api/me')).json();
     await expect(page.getByRole('heading', { name: 'Касса' })).toBeVisible();
+    await expandFilters(page);
     await expect(page.getByLabel('Начало периода')).toBeVisible();
     await expect(page.locator('#currency-summary table')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Итоги и сальдо' })).toBeVisible();
@@ -182,6 +188,7 @@ test('поиск по примечанию применяется и сохра�
 });
 
 test('готовые периоды и проверка дат работают', async ({ page }) => {
+    await expandFilters(page);
     await page.clock.setFixedTime(new Date(2024, 2, 1, 12));
     const preset = page.getByLabel('Период', { exact: true });
     const from = page.getByLabel('Начало периода', { exact: true });
@@ -206,6 +213,7 @@ test('готовые периоды и проверка дат работают'
     await page.reload();
     await expect(from).toHaveValue('');
     await expect(to).toHaveValue('2024-03-01');
+    await expandFilters(page);
     await from.fill('2024-02-01');
     await to.focus();
     await to.press('Backspace');
@@ -213,6 +221,7 @@ test('готовые периоды и проверка дат работают'
     await page.reload();
     await expect(from).toHaveValue('2024-02-01');
     await expect(to).toHaveValue('');
+    await expandFilters(page);
     await to.fill('2024-03-01');
     const validUrl = page.url();
     await from.fill('2024-03-02');
@@ -313,6 +322,7 @@ test('дата открывает редактор существующей оп
 });
 
 test('фильтр сохраняется в URL и восстанавливается после перезагрузки', async ({ page }) => {
+    await expandFilters(page);
     const account = page.locator('#filters [name="account_id"]');
     await expect(account.locator('option')).not.toHaveCount(1);
     await account.selectOption({ index: 1 });
@@ -327,7 +337,64 @@ test('фильтр сохраняется в URL и восстанавливае
     await expect(page).not.toHaveURL(/account_id=/);
 });
 
+test('смена схемы сбрасывает фильтры', async ({ page }) => {
+    await expandFilters(page);
+    await page.locator('#filters [name="memo"]').fill('не переносить');
+    const schema = page.locator('#data-schema');
+    await schema.evaluate(select => select.add(new Option('xyz', 'xyz')));
+    await page.route('**/api/schema', route => route.fulfill({ json: {} }));
+    await schema.selectOption('xyz');
+    await expect.poll(() => page.evaluate(() => Object.entries(localStorage).find(([key]) => key.startsWith('data-schema:'))?.[1])).toBe('xyz');
+    await expect(page.locator('#filters [name="memo"]')).toHaveValue('');
+    await expect(page).not.toHaveURL(/memo=/);
+    await expect(page.locator('#period-preset')).toHaveValue('');
+});
+
+test('мобильная версия использует карточки, сворачиваемые фильтры и нижние действия', async ({ page }) => {
+    test.skip((page.viewportSize()?.width ?? 1000) > 479, 'Только мобильная компоновка');
+    await page.setViewportSize({ width: 320, height: 568 });
+    const toggle = page.locator('#filter-toggle');
+    await expect(page.locator('.dashboard__title')).toContainText('Берг Касса');
+    await expect(page.locator('#navigation > summary')).toHaveCSS('font-size', '0px');
+    await expect(page.locator('#data-schema')).toHaveCSS('text-transform', 'uppercase');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toContainText('Фильтры');
+    await expect(toggle).toContainText('▾');
+    await expect(page.locator('#filter-fields')).toBeHidden();
+    await toggle.click();
+    await expect(toggle).toContainText('Скрыть фильтры');
+    await expect(toggle).toContainText('▴');
+    await expect(page.locator('#filter-fields')).toBeVisible();
+    const summary = page.locator('.summary');
+    await expect(summary).toBeVisible();
+    await expect(summary).toHaveCSS('position', 'fixed');
+    await expect(summary).toHaveCSS('bottom', '0px');
+    expect(await summary.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await expect(summary.locator('.summary-table')).toBeHidden();
+    const totals = summary.locator('.summary-compact__details');
+    await expect(totals).not.toHaveAttribute('open', '');
+    await totals.locator('summary').click();
+    await expect(totals).toHaveAttribute('open', '');
+    await expect(totals.locator('.summary-compact__breakdown:not([hidden])')).toBeVisible();
+    await expect(page.locator('.operation-panel--active .operation-panel__columns-scroll')).toBeHidden();
+    await expect(page.locator('.operation-panel--active .operation-panel__body')).toHaveCSS('touch-action', 'pan-y pinch-zoom');
+    const swipeArea = page.locator('.operation-panel--active .operation-panel__body');
+    await page.locator('[data-flow-tab="income"]').click();
+    await swipeArea.dispatchEvent('pointerdown', { pointerId: 1, clientX: 250, clientY: 150 });
+    await swipeArea.dispatchEvent('pointerup', { pointerId: 1, clientX: 180, clientY: 230 });
+    await expect(page.locator('[data-flow-tab="income"]')).toHaveAttribute('aria-selected', 'true');
+    await swipeArea.dispatchEvent('pointerdown', { pointerId: 2, clientX: 250, clientY: 150 });
+    await swipeArea.dispatchEvent('pointerup', { pointerId: 2, clientX: 150, clientY: 160 });
+    await expect(page.locator('[data-flow-tab="expense"]')).toHaveAttribute('aria-selected', 'true');
+    await swipeArea.dispatchEvent('pointerdown', { pointerId: 3, clientX: 100, clientY: 150 });
+    await swipeArea.dispatchEvent('pointerup', { pointerId: 3, clientX: 200, clientY: 160 });
+    await expect(page.locator('[data-flow-tab="income"]')).toHaveAttribute('aria-selected', 'true');
+    await page.locator('.operation-panel--active [data-add-flow="income"]').click();
+    await expect(page.locator('.operation-form__section')).toHaveText(['Основное', 'Классификация', 'Дополнительно']);
+});
+
 test('каскад не предлагает несовместимые уровни', async ({ page }) => {
+    await expandFilters(page);
     const lookups = await (await page.request.get('/api/lookups')).json();
     const actionRecord = lookups.action_types.find(item => item.direction_id);
     test.skip(!actionRecord, 'Нет связанной операции для проверки');

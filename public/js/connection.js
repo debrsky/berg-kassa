@@ -64,6 +64,27 @@ async function fetchJson(url, options = {}) {
     return data;
 }
 
+function saveDataSchema(user, schema) {
+    localStorage.setItem(`data-schema:${user.id}`, schema);
+}
+
+async function restoreDataSchema(user) {
+    const key = `data-schema:${user.id}`;
+    const schema = localStorage.getItem(key);
+    if (!schema || !user.data_schemas.includes(schema) || user.unavailable_data_schemas.includes(schema)) {
+        if (schema) localStorage.removeItem(key);
+        return;
+    }
+    if (schema !== user.data_schema) {
+        await fetchJson('/api/schema', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': user.csrf_token },
+            body: JSON.stringify({ data_schema: schema }),
+        });
+        user.data_schema = schema;
+    }
+}
+
 function bindLogout(token) {
     document.querySelector('#logout').addEventListener('click', async () => {
         try {

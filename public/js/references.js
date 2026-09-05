@@ -279,6 +279,7 @@ document.querySelector('#data-schema').addEventListener('change', async event =>
             body: JSON.stringify({ data_schema: event.target.value }),
         });
         currentUser.data_schema = event.target.value;
+        saveDataSchema(currentUser, event.target.value);
         lookups = await fetchJson('/api/lookups');
         await loadReferences('', true);
         manager.inert = false;
@@ -295,6 +296,7 @@ bindLogout(() => currentUser.csrf_token);
 async function init() {
     try {
         currentUser = await fetchJson('/api/me');
+        await restoreDataSchema(currentUser);
         document.querySelector('#current-user').textContent = currentUser.login;
         document.querySelector('#audit-link').hidden = !currentUser.can_view_protected;
         document.querySelector('#users-link').hidden = !currentUser.can_view_protected;

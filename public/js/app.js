@@ -53,6 +53,23 @@ for (const tab of tabs) {
 }
 selectOperationsTab(sessionStorage.getItem('operations-tab') === 'expense' ? 'expense' : 'income');
 
+let swipeStart;
+const operationsBoard = document.querySelector('.operations-board');
+operationsBoard.addEventListener('pointerdown', event => {
+    if (innerWidth > 479 || event.target.closest('button, a, input, select, textarea, .operation-row__note')) return;
+    swipeStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    try { operationsBoard.setPointerCapture(event.pointerId); } catch {}
+});
+operationsBoard.addEventListener('pointerup', event => {
+    if (!swipeStart || event.pointerId !== swipeStart.id) return;
+    const dx = event.clientX - swipeStart.x;
+    const dy = event.clientY - swipeStart.y;
+    swipeStart = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) <= Math.abs(dy) * 1.5) return;
+    selectOperationsTab(dx < 0 ? 'expense' : 'income');
+});
+operationsBoard.addEventListener('pointercancel', () => { swipeStart = null; });
+
 function presetDates(preset, now = new Date()) {
     const start = new Date(now);
     const end = new Date(now);
@@ -136,6 +153,7 @@ async function refresh() {
     requestVersion++;
     const version = requestVersion;
     appliedFilters = filterParams();
+    updateFilterToggle();
     updateUrl(appliedFilters);
     status.textContent = 'Обновление…';
     lists.forEach(list => list.reset());
@@ -150,17 +168,43 @@ async function refresh() {
 }
 
 function renderSummary(data) {
-    document.querySelector('#currency-summary').innerHTML = summaryTable(data.currencies);
+    const container = document.querySelector('#currency-summary');
+    const wasOpen = container.querySelector('.summary-compact__details')?.open ?? false;
+    container.innerHTML = summaryTable(data.currencies) + summaryCompact(data.currencies);
+    const details = container.querySelector('.summary-compact__details');
+    if (!details) return;
+    details.open = wasOpen;
+    const tabs = [...container.querySelectorAll('[data-summary-tab]')];
+    const activate = tab => {
+        for (const button of tabs) {
+            const active = button === tab;
+            button.setAttribute('aria-selected', String(active));
+            button.tabIndex = active ? 0 : -1;
+        }
+        for (const element of container.querySelectorAll('[data-summary-index]')) element.hidden = element.dataset.summaryIndex !== tab.dataset.summaryTab;
+        sessionStorage.setItem('summary-currency', tab.dataset.currency);
+    };
+    for (const tab of tabs) {
+        tab.addEventListener('click', () => activate(tab));
+        tab.addEventListener('keydown', event => {
+            if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+            event.preventDefault();
+            const next = tabs[(tabs.indexOf(tab) + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+            activate(next);
+            next.focus();
+        });
+    }
+    activate(tabs.find(tab => tab.dataset.currency === sessionStorage.getItem('summary-currency')) || tabs[0]);
 }
 
 function summaryTable(rows) {
     const body = rows.map(row => `<tr>
-        <td>${escapeHtml(row.currency)}</td>
-        <td>${money.format(row.opening)}</td>
-        <td class="summary-table__value--income">${money.format(row.income)}</td>
-        <td class="summary-table__value--expense">${money.format(row.expense)}</td>
-        <td>${money.format(row.current)}</td>
-        <td class="summary-table__value--strong">${money.format(row.closing)}</td>
+        <td data-label="Валюта">${escapeHtml(row.currency)}</td>
+        <td data-label="Начальное">${money.format(row.opening)}</td>
+        <td data-label="Приход" class="summary-table__value--income">${money.format(row.income)}</td>
+        <td data-label="Расход" class="summary-table__value--expense">${money.format(row.expense)}</td>
+        <td data-label="За период">${money.format(row.current)}</td>
+        <td data-label="Конечное" class="summary-table__value--strong">${money.format(row.closing)}</td>
     </tr>`).join('');
     return `<table class="summary-table"><thead><tr><th>Валюта</th><th>Начальное</th><th>Приход</th><th>Расход</th><th>За период</th><th>Конечное</th></tr></thead><tbody>${body || '<tr><td colspan="6">Нет данных</td></tr>'}</tbody></table>`;
 }
@@ -303,6 +347,30 @@ document.querySelector('#operation-posting').addEventListener('toggle', event =>
 for (const button of document.querySelectorAll('[data-add-flow]')) {
     button.addEventListener('click', () => openOperation(null, button.dataset.addFlow === 'income'));
 }
+
+function summaryCompact(rows) {
+    if (!rows.length) return '<p class="summary-compact">Нет данных</p>';
+    const tabs = rows.map((row, index) => `<button type="button" role="tab" data-summary-tab="${index}" data-currency="${escapeHtml(row.currency)}">${escapeHtml(row.currency)}</button>`).join('');
+    const headlines = rows.map((row, index) => `<span class="summary-compact__headline" data-summary-index="${index}">
+        <span>${escapeHtml(row.currency)}</span>
+        <strong>${summaryMoney(row.closing, row.currency)}</strong>
+        <small>За период: ${summaryMoney(row.current, row.currency, true)}</small>
+    </span>`).join('');
+    const panels = rows.map((row, index) => `<dl class="summary-compact__breakdown" data-summary-index="${index}">
+        <dt>Начальное</dt><dd>${summaryMoney(row.opening, row.currency)}</dd>
+        <dt>Приход</dt><dd class="summary-table__value--income">${summaryMoney(row.income, row.currency)}</dd>
+        <dt>Расход</dt><dd class="summary-table__value--expense">${summaryMoney(row.expense, row.currency)}</dd>
+        <dt>За период</dt><dd>${summaryMoney(row.current, row.currency, true)}</dd>
+        <dt>Конечное</dt><dd class="summary-table__value--strong">${summaryMoney(row.closing, row.currency)}</dd>
+    </dl>`).join('');
+    return `<div class="summary-compact"><div class="summary-compact__tabs" role="tablist" aria-label="Валюта итогов">${tabs}</div>
+        <details class="summary-compact__details"><summary>${headlines}</summary>${panels}</details></div>`;
+}
+
+function summaryMoney(value, currency, signed = false) {
+    const number = Number(value);
+    return `${signed && number > 0 ? '+' : ''}${money.format(number)} ${escapeHtml(currency)}`;
+}
 for (const button of document.querySelectorAll('[data-close-dialog]')) {
     button.addEventListener('click', () => operationDialog.close());
 }
@@ -387,15 +455,37 @@ form.addEventListener('change', event => {
     }
     refresh();
 });
-document.querySelector('#reset-filters').addEventListener('click', () => {
+function resetFilters() {
     form.reset();
     const [from, to] = defaultDates();
     form.elements.from_date.value = from;
     form.elements.to_date.value = to;
     for (const name of Object.keys(lookupFields)) form.elements[name].value = '';
     refreshCascade();
+}
+
+document.querySelector('#reset-filters').addEventListener('click', () => {
+    resetFilters();
     refresh();
 });
+
+const filterToggle = document.querySelector('#filter-toggle');
+filterToggle.addEventListener('click', () => {
+    const expanded = filterToggle.getAttribute('aria-expanded') !== 'true';
+    filterToggle.setAttribute('aria-expanded', String(expanded));
+    document.querySelector('#filter-fields').classList.toggle('filter-bar--expanded', expanded);
+    updateFilterToggle();
+});
+
+function updateFilterToggle() {
+    const [defaultFrom, defaultTo] = defaultDates();
+    const active = [...form.elements].filter(element => element.name && (
+        element.type === 'checkbox' ? element.checked : element.value &&
+        !((element.name === 'from_date' && element.value === defaultFrom) || (element.name === 'to_date' && element.value === defaultTo))
+    )).length;
+    const expanded = filterToggle.getAttribute('aria-expanded') === 'true';
+    filterToggle.textContent = `${expanded ? 'Скрыть фильтры' : 'Фильтры'}${active ? ` (${active})` : ''} ${expanded ? '▴' : '▾'}`;
+}
 
 bindLogout(() => currentUser.csrf_token);
 
@@ -410,10 +500,11 @@ document.querySelector('#data-schema').addEventListener('change', async event =>
             body: JSON.stringify({ data_schema: event.target.value }),
         });
         currentUser.data_schema = event.target.value;
+        saveDataSchema(currentUser, event.target.value);
         lookups = await fetchJson('/api/lookups');
+        resetFilters();
         fillSelect('account_id');
         fillSelect('currency_id');
-        refreshCascade();
         document.querySelector('#filter-fields').disabled = false;
         for (const button of document.querySelectorAll('[data-add-flow]')) button.disabled = false;
         refresh();
@@ -427,6 +518,7 @@ document.querySelector('#data-schema').addEventListener('change', async event =>
 async function init() {
     try {
         currentUser = await fetchJson('/api/me');
+        await restoreDataSchema(currentUser);
         document.querySelector('#current-user').textContent = currentUser.login;
         document.querySelector('#audit-link').hidden = !currentUser.can_view_protected;
         document.querySelector('#users-link').hidden = !currentUser.can_view_protected;

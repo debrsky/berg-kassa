@@ -298,7 +298,7 @@ try {
     <header class="dashboard__header">
         <div>
             <p class="dashboard__eyebrow">Финансовый журнал</p>
-            <h1 class="dashboard__title">Касса</h1>
+            <h1 class="dashboard__title"><span class="dashboard__mobile-brand" aria-hidden="true">Берг </span>Касса</h1>
         </div>
         <div class="dashboard__session">
             <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
@@ -312,6 +312,7 @@ try {
         </div>
     </header>
 
+    <button class="filter-toggle" id="filter-toggle" type="button" aria-expanded="false" aria-controls="filter-fields">Фильтры</button>
     <form id="filters">
     <fieldset class="filter-bar" id="filter-fields" disabled>
         <label class="filter-bar__field">
@@ -327,40 +328,40 @@ try {
                 <option value="all">За всё время</option>
             </select>
         </label>
-        <label class="filter-bar__field">
+        <label class="filter-bar__field filter-bar__advanced">
             <span class="filter-bar__label">С</span>
             <input class="filter-bar__control" type="date" name="from_date" aria-label="Начало периода" title="Пустая дата — без ограничения начала периода">
         </label>
-        <label class="filter-bar__field">
+        <label class="filter-bar__field filter-bar__advanced">
             <span class="filter-bar__label">По</span>
             <input class="filter-bar__control" type="date" name="to_date" aria-label="Конец периода" title="Конечная дата включается в период. Пустая дата — без ограничения конца периода">
         </label>
-        <label class="filter-bar__field">
+        <label class="filter-bar__field filter-bar__advanced">
             <span class="filter-bar__label">Счёт</span>
             <select class="filter-bar__control" name="account_id"></select>
         </label>
-        <label class="filter-bar__field">
+        <label class="filter-bar__field filter-bar__advanced">
             <span class="filter-bar__label">Валюта</span>
             <select class="filter-bar__control" name="currency_id"></select>
         </label>
-        <label class="filter-bar__field">
+        <label class="filter-bar__field filter-bar__advanced">
             <span class="filter-bar__label">Направление</span>
             <select class="filter-bar__control" name="direction_id"></select>
         </label>
-        <label class="filter-bar__field">
+        <label class="filter-bar__field filter-bar__advanced">
             <span class="filter-bar__label">Операция</span>
             <select class="filter-bar__control" name="action_type_id"></select>
         </label>
-        <label class="filter-bar__field">
+        <label class="filter-bar__field filter-bar__advanced">
             <span class="filter-bar__label">Подоперация 1</span>
             <select class="filter-bar__control" name="suboperation_l1_id"></select>
         </label>
-        <label class="filter-bar__field">
+        <label class="filter-bar__field filter-bar__advanced">
             <span class="filter-bar__label">Подоперация 2</span>
             <select class="filter-bar__control" name="suboperation_l2_id"></select>
         </label>
         <?php if ($pageUser['can_view_protected']): ?>
-        <label class="filter-bar__field filter-bar__field--checkbox" id="protected-filter">
+        <label class="filter-bar__field filter-bar__field--checkbox filter-bar__advanced" id="protected-filter">
             <span class="filter-bar__checkbox-label">
                 <input type="checkbox" name="include_protected" value="1">
                 Защищённые
@@ -437,6 +438,7 @@ try {
         </header>
         <input type="hidden" name="id">
         <div class="operation-form__grid">
+            <h3 class="operation-form__section">Основное</h3>
             <label class="operation-form__field">
                 <span>Тип</span>
                 <select name="is_debit" required>
@@ -448,6 +450,14 @@ try {
                 <span>Дата и время</span>
                 <input type="datetime-local" name="action_date" required>
             </label>
+            <label class="operation-form__field">
+                <span>Сумма</span>
+                <input type="number" name="amount" min="0.01" step="0.01" inputmode="decimal" required>
+            </label>
+            <label class="operation-form__field">
+                <span>Счёт</span>
+                <select name="account_id" required></select>
+            </label>
             <div class="operation-form__currency">
                 <label class="operation-form__field">
                     <span>Валюта</span>
@@ -455,13 +465,10 @@ try {
                 </label>
                 <label class="operation-form__field">
                     <span>Курс</span>
-                    <input type="number" name="exchange_rate" min="0.0001" step="0.0001">
+                    <input type="number" name="exchange_rate" min="0.0001" step="0.0001" inputmode="decimal">
                 </label>
             </div>
-            <label class="operation-form__field">
-                <span>Счёт</span>
-                <select name="account_id" required></select>
-            </label>
+            <h3 class="operation-form__section">Классификация</h3>
             <label class="operation-form__field">
                 <span>Направление</span>
                 <select name="direction_id" required></select>
@@ -478,10 +485,7 @@ try {
                 <span>Подоперация 2</span>
                 <select name="suboperation_id" required></select>
             </label>
-            <label class="operation-form__field">
-                <span>Сумма</span>
-                <input type="number" name="amount" min="0.01" step="0.01" required>
-            </label>
+            <h3 class="operation-form__section">Дополнительно</h3>
             <label class="operation-form__field operation-form__field--wide">
                 <span>Примечание</span>
                 <textarea name="memo" rows="3"></textarea>

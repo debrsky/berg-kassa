@@ -44,7 +44,7 @@ class VirtualList {
             if (response.total !== null) {
                 this.total = Number(response.total);
                 this.count.textContent = this.total.toLocaleString('ru-RU');
-                this.canvas.style.height = `${this.total * ROW_HEIGHT}px`;
+                this.canvas.style.height = `${this.total * operationRowHeight()}px`;
             }
             this.pages.set(page, response.items);
             while (this.pages.size > MAX_CACHED_PAGES) this.pages.delete(this.pages.keys().next().value);
@@ -80,8 +80,10 @@ class VirtualList {
             this.canvas.replaceChildren(this.message('Операций не найдено'));
             return;
         }
-        const start = Math.max(0, Math.floor(this.viewport.scrollTop / ROW_HEIGHT) - BUFFER);
-        const visible = Math.ceil(this.viewport.clientHeight / ROW_HEIGHT) + BUFFER * 2;
+        this.canvas.style.height = `${this.total * operationRowHeight()}px`;
+        const rowHeight = operationRowHeight();
+        const start = Math.max(0, Math.floor(this.viewport.scrollTop / rowHeight) - BUFFER);
+        const visible = Math.ceil(this.viewport.clientHeight / rowHeight) + BUFFER * 2;
         const end = Math.min(this.total, start + visible);
         const firstPage = Math.floor(start / PAGE_SIZE);
         const lastPage = Math.floor((end - 1) / PAGE_SIZE);
@@ -131,8 +133,8 @@ class VirtualList {
         const row = document.createElement('article');
         row.className = 'operation-row' + (item.is_black ? ' operation-row--protected' : '');
         row.dataset.operationId = item.id;
-        row.style.transform = `translateY(${index * ROW_HEIGHT}px)`;
-        const operation = [item.direction, item.action_type].filter(Boolean).join(' · ') || 'Без направления';
+        row.style.transform = `translateY(${index * operationRowHeight()}px)`;
+        const operation = [item.direction, item.action_type].filter(Boolean).join(' → ') || 'Без направления';
         const suboperation = item.suboperation_placeholder
             ? `Неизвестно (ID: ${item.suboperation_id})`
             : [item.suboperation_l1, item.suboperation_l2].filter(Boolean).join(' · ');
@@ -157,15 +159,19 @@ class VirtualList {
             event.stopPropagation();
             openOperation(item);
         });
-        row.addEventListener('dblclick', () => openOperation(item));
+        if (!matchMedia('(max-width: 479px)').matches) row.addEventListener('dblclick', () => openOperation(item));
         return row;
     }
 
     message(text, error = false, index = 0) {
         const element = document.createElement('p');
         element.className = 'operation-panel__message' + (error ? ' operation-panel__message--error' : '');
-        element.style.transform = `translateY(${index * ROW_HEIGHT}px)`;
+        element.style.transform = `translateY(${index * operationRowHeight()}px)`;
         element.textContent = text;
         return element;
     }
+}
+
+function operationRowHeight() {
+    return matchMedia('(max-width: 479px)').matches ? 128 : ROW_HEIGHT;
 }

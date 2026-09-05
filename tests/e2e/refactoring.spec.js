@@ -7,6 +7,22 @@ test.beforeEach(async ({ page }) => {
     } })).ok()).toBeTruthy();
 });
 
+test('схема восстанавливается из локальной настройки устройства', async ({ page }) => {
+    const user = await (await page.request.get('/api/me')).json();
+    await page.addInitScript(({ key }) => localStorage.setItem(key, 'test_other'), { key: `data-schema:${user.id}` });
+    await page.route('**/api/me', route => route.fulfill({ json: {
+        ...user, data_schemas: [user.data_schema, 'test_other'], unavailable_data_schemas: [],
+    } }));
+    let selected;
+    await page.route('**/api/schema', async route => {
+        selected = (await route.request().postDataJSON()).data_schema;
+        await route.fulfill({ json: { ok: true } });
+    });
+    await page.goto('/');
+    await expect(page.locator('#data-schema')).toHaveValue('test_other');
+    expect(selected).toBe('test_other');
+});
+
 for (const kind of ['users', 'references']) {
     test(`${kind}: подтверждённая запись не создаётся повторно после сбоя чтения`, async ({ page }) => {
         await page.goto('/' + kind);
