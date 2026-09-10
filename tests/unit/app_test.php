@@ -24,6 +24,16 @@ try {
     check(true, 'integerParameter rejects zero');
 }
 
+$_GET = ['checked' => '0'];
+check(booleanParameter('checked') === false, 'booleanParameter accepts false');
+$_GET = ['checked' => 'yes'];
+try {
+    booleanParameter('checked');
+    check(false, 'booleanParameter rejects unknown values');
+} catch (InvalidArgumentException) {
+    check(true, 'booleanParameter rejects unknown values');
+}
+
 $_GET = ['date' => '2026-02-29'];
 try {
     dateParameter('date', '2026-01-01');
@@ -44,11 +54,14 @@ $params = [];
 $sql = filterSql([
     'account_id' => 7, 'currency_id' => null, 'direction_id' => null,
     'action_type_id' => null, 'suboperation_l1_id' => null, 'suboperation_l2_id' => null,
+    'checked_user' => true, 'checked_superuser' => false,
     'include_protected' => false, 'from_date' => '2026-01-01', 'to_date' => '2026-01-31',
 ], $params, true);
 check(str_contains($sql, 'a.account_id = :account_id'), 'filterSql applies IDs');
 check(str_contains($sql, 'a.is_black = false'), 'filterSql hides protected rows');
-check($params['account_id'] === 7 && count($params) === 3, 'filterSql binds expected values');
+check(str_contains($sql, 'a.is_checked_user = :checked_user'), 'filterSql applies user check');
+check(str_contains($sql, 'a.is_checked_superuser = :checked_superuser'), 'filterSql applies superuser check');
+check($params['account_id'] === 7 && count($params) === 5, 'filterSql binds expected values');
 
 check(positiveDecimal('99999999999999999.99', 19, 2, 'amount') === '99999999999999999.99', 'large amount remains exact');
 check(positiveDecimal('0001.995', 19, 2, 'amount') === '2.00', 'decimal rounding carries exactly');

@@ -169,6 +169,17 @@ test('основная страница и форма добавления ра�
     await page.getByRole('button', { name: 'Закрыть' }).click();
 });
 
+test('фильтры отметок в заголовках независимы', async ({ page }) => {
+    test.skip(page.viewportSize().width < 800, 'На мобильном фильтры находятся в общей панели');
+    const filters = page.locator('[data-check-filter="checked_user"]');
+    await expect(filters).toHaveCount(2);
+    await filters.first().click();
+    await expect(filters).toHaveText(['✓', '—']);
+    await expect.poll(() => new URL(page.url()).searchParams.get('income_checked_user')).toBe('1');
+    await expect(page.locator('.summary-table th').filter({ hasText: 'Приход' })).toContainText('с учётом отметок');
+    await expect(page.locator('.summary-table th').filter({ hasText: 'Расход' })).not.toContainText('с учётом отметок');
+});
+
 test('поиск по примечанию применяется и сохраняется', async ({ page }) => {
     const memo = page.locator('#filters [name="memo"]');
     await memo.fill('аренда');

@@ -137,8 +137,12 @@ CREATE TABLE IF NOT EXISTS actions (
     amount numeric(19,2),
     is_debit boolean,
     memo text,
-    is_black boolean
+    is_black boolean,
+    is_checked_user boolean NOT NULL DEFAULT false,
+    is_checked_superuser boolean NOT NULL DEFAULT false
 );
+ALTER TABLE actions ADD COLUMN IF NOT EXISTS is_checked_user boolean NOT NULL DEFAULT false;
+ALTER TABLE actions ADD COLUMN IF NOT EXISTS is_checked_superuser boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS actions_date_idx ON actions(action_date);
 CREATE INDEX IF NOT EXISTS actions_account_date_idx ON actions(account_id, action_date);
 CREATE INDEX IF NOT EXISTS actions_suboperation_date_idx

@@ -346,6 +346,30 @@ test('поиск по примечанию валидирует параметр
     }
 });
 
+test('отметка операции переключается и фильтруется', async ({ request }) => {
+    const me = await (await request.get('/api/me')).json();
+    const field = me.can_view_protected ? 'is_checked_superuser' : 'is_checked_user';
+    const filter = me.can_view_protected ? 'checked_superuser' : 'checked_user';
+    const page = await (await request.get('/api/actions?flow=income&from_date=&to_date=&limit=1')).json();
+    test.skip(!page.items.length, 'Нет операции для проверки');
+    const item = page.items[0];
+    const original = item[field];
+    try {
+        const response = await request.patch(`/api/actions/${item.id}/check`, {
+            headers: { 'X-CSRF-Token': csrf }, data: { checked: !original },
+        });
+        expect(response.ok()).toBeTruthy();
+        expect((await response.json())[field]).toBe(!original);
+        const filtered = await (await request.get(`/api/actions?flow=income&from_date=&to_date=&income_${filter}=${original ? 0 : 1}&limit=200`)).json();
+        expect(filtered.items.some(action => action.id === item.id)).toBeTruthy();
+        expect((await request.get(`/api/action-summary?from_date=&to_date=&income_${filter}=${original ? 0 : 1}`)).ok()).toBeTruthy();
+    } finally {
+        await request.patch(`/api/actions/${item.id}/check`, {
+            headers: { 'X-CSRF-Token': csrf }, data: { checked: original },
+        });
+    }
+});
+
 test('большие суммы сохраняются и сальдо вычисляется точно', async ({ request }) => {
     const lookups = await (await request.get('/api/lookups')).json();
     const ids = [];

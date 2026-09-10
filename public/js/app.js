@@ -23,6 +23,10 @@ let requestVersion = 0;
 let memoTimer;
 let appliedFilters = new URLSearchParams();
 let currentUser;
+const checkFilters = {
+    income: { checked_user: '', checked_superuser: '' },
+    expense: { checked_user: '', checked_superuser: '' },
+};
 
 const lists = [...document.querySelectorAll('.operation-panel')].map(panel => new VirtualList(panel));
 
@@ -38,6 +42,7 @@ function selectOperationsTab(flow) {
         list.panel.classList.toggle('operation-panel--active', list.flow === flow);
         if (list.flow === flow) list.render();
     }
+    syncCheckFilters();
 }
 
 const tabs = [...document.querySelectorAll('[data-flow-tab]')];
@@ -96,17 +101,54 @@ function restoreFilters() {
     form.elements.to_date.value = params.get('to_date') ?? to;
     if (!form.elements.from_date.value && !form.elements.to_date.value) document.querySelector('#period-preset').value = 'all';
     form.elements.include_protected.checked = params.get('include_protected') === '1';
+    for (const flow of ['income', 'expense']) {
+        for (const name of ['checked_user', 'checked_superuser']) {
+            checkFilters[flow][name] = params.get(`${flow}_${name}`) ?? '';
+        }
+    }
     for (const name of Object.keys(lookupFields)) form.elements[name].dataset.value = params.get(name) || '';
+    syncCheckFilters();
+}
+
+function syncCheckFilters() {
+    const states = { '': ['—', 'Все'], '1': ['✓', 'Поставлена'], '0': ['□', 'Не поставлена'] };
+    for (const button of document.querySelectorAll('[data-check-filter]')) {
+        const name = button.dataset.checkFilter;
+        const value = checkFilters[button.dataset.filterFlow][name];
+        const [symbol, label] = states[value];
+        const owner = name === 'checked_user' ? 'пользователя' : 'суперпользователя';
+        button.value = value;
+        button.textContent = symbol;
+        button.title = `Отметка ${owner}: ${label}`;
+        button.setAttribute('aria-label', `Фильтр по отметке ${owner}: ${label}. Нажмите, чтобы переключить`);
+    }
+    const activeFlow = document.querySelector('.operations-tabs__tab--active')?.dataset.flowTab || 'income';
+    for (const name of ['checked_user', 'checked_superuser']) form.elements[name].value = checkFilters[activeFlow][name];
+}
+
+for (const button of document.querySelectorAll('[data-check-filter]')) {
+    button.addEventListener('click', () => {
+        const values = ['', '1', '0'];
+        checkFilters[button.dataset.filterFlow][button.dataset.checkFilter] = values[(values.indexOf(button.value) + 1) % values.length];
+        syncCheckFilters();
+        refresh();
+    });
 }
 
 function filterParams() {
     const params = new URLSearchParams();
     for (const element of form.elements) {
         if (!element.name) continue;
+        if (['checked_user', 'checked_superuser'].includes(element.name)) continue;
         if (element.type === 'checkbox') {
             if (element.checked) params.set(element.name, '1');
         } else if (element.value || element.type === 'date') {
             params.set(element.name, element.value);
+        }
+    }
+    for (const flow of ['income', 'expense']) {
+        for (const name of ['checked_user', 'checked_superuser']) {
+            if (checkFilters[flow][name]) params.set(`${flow}_${name}`, checkFilters[flow][name]);
         }
     }
     return params;
@@ -202,6 +244,8 @@ function renderSummary(data) {
 }
 
 function summaryTable(rows) {
+    const incomeHeading = summaryFlowHeading('Приход', 'income');
+    const expenseHeading = summaryFlowHeading('Расход', 'expense');
     const body = rows.map(row => `<tr>
         <td data-label="Валюта">${escapeHtml(row.currency)}</td>
         <td data-label="Начальное">${money.format(row.opening)}</td>
@@ -210,7 +254,13 @@ function summaryTable(rows) {
         <td data-label="За период">${money.format(row.current)}</td>
         <td data-label="Конечное" class="summary-table__value--strong">${money.format(row.closing)}</td>
     </tr>`).join('');
-    return `<table class="summary-table"><thead><tr><th>Валюта</th><th>Начальное</th><th>Приход</th><th>Расход</th><th>За период</th><th>Конечное</th></tr></thead><tbody>${body || '<tr><td colspan="6">Нет данных</td></tr>'}</tbody></table>`;
+    return `<table class="summary-table"><thead><tr><th>Валюта</th><th>Начальное</th><th>${incomeHeading}</th><th>${expenseHeading}</th><th>За период</th><th>Конечное</th></tr></thead><tbody>${body || '<tr><td colspan="6">Нет данных</td></tr>'}</tbody></table>`;
+}
+
+function summaryFlowHeading(label, flow) {
+    return Object.values(checkFilters[flow]).some(Boolean)
+        ? `${label}<small class="summary-filter-note">с учётом отметок</small>`
+        : label;
 }
 
 function formatDate(value) {
@@ -362,8 +412,8 @@ function summaryCompact(rows) {
     </span>`).join('');
     const panels = rows.map((row, index) => `<dl class="summary-compact__breakdown" data-summary-index="${index}">
         <dt>Начальное</dt><dd>${summaryMoney(row.opening, row.currency)}</dd>
-        <dt>Приход</dt><dd class="summary-table__value--income">${summaryMoney(row.income, row.currency)}</dd>
-        <dt>Расход</dt><dd class="summary-table__value--expense">${summaryMoney(row.expense, row.currency)}</dd>
+        <dt>${summaryFlowHeading('Приход', 'income')}</dt><dd class="summary-table__value--income">${summaryMoney(row.income, row.currency)}</dd>
+        <dt>${summaryFlowHeading('Расход', 'expense')}</dt><dd class="summary-table__value--expense">${summaryMoney(row.expense, row.currency)}</dd>
         <dt>За период</dt><dd>${summaryMoney(row.current, row.currency, true)}</dd>
         <dt>Конечное</dt><dd class="summary-table__value--strong">${summaryMoney(row.closing, row.currency)}</dd>
     </dl>`).join('');
@@ -457,15 +507,22 @@ form.addEventListener('change', event => {
         clearDescendants(event.target.name);
         refreshCascade('action_type_id');
     }
+    if (['checked_user', 'checked_superuser'].includes(event.target.name)) {
+        const flow = document.querySelector('.operations-tabs__tab--active').dataset.flowTab;
+        checkFilters[flow][event.target.name] = event.target.value;
+        syncCheckFilters();
+    }
     refresh();
 });
 function resetFilters() {
     form.reset();
+    for (const flow of ['income', 'expense']) for (const name of ['checked_user', 'checked_superuser']) checkFilters[flow][name] = '';
     const [from, to] = defaultDates();
     form.elements.from_date.value = from;
     form.elements.to_date.value = to;
     for (const name of Object.keys(lookupFields)) form.elements[name].value = '';
     refreshCascade();
+    syncCheckFilters();
 }
 
 document.querySelector('#reset-filters').addEventListener('click', () => {
@@ -483,10 +540,10 @@ filterToggle.addEventListener('click', () => {
 
 function updateFilterToggle() {
     const [defaultFrom, defaultTo] = defaultDates();
-    const active = [...form.elements].filter(element => element.name && (
+    const active = [...form.elements].filter(element => element.name && !['checked_user', 'checked_superuser'].includes(element.name) && (
         element.type === 'checkbox' ? element.checked : element.value &&
         !((element.name === 'from_date' && element.value === defaultFrom) || (element.name === 'to_date' && element.value === defaultTo))
-    )).length;
+    )).length + Object.values(checkFilters).flatMap(Object.values).filter(Boolean).length;
     const expanded = filterToggle.getAttribute('aria-expanded') === 'true';
     filterToggle.textContent = `${expanded ? 'Скрыть фильтры' : 'Фильтры'}${active ? ` (${active})` : ''} ${expanded ? '▴' : '▾'}`;
 }

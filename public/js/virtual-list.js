@@ -150,11 +150,39 @@ class VirtualList {
                 <span class="operation-row__suboperation-text">${escapeHtml(suboperation || '—')}</span>
                 ${hasNote ? `<small class="operation-row__note">${escapeHtml(item.memo)}</small>` : ''}
             </span>
+            <span class="operation-row__checks">
+                <label title="Отметка пользователя"><span>П</span><input type="checkbox" data-check="user" aria-label="Отметка пользователя"></label>
+                <label title="Отметка суперпользователя"><span>С</span><input type="checkbox" data-check="superuser" aria-label="Отметка суперпользователя"></label>
+            </span>
             <strong class="operation-row__amount">${item.amount == null ? '—' : money.format(item.amount)} <small>${escapeHtml(item.currency)}</small></strong>`;
         row.querySelector('.operation-row__account').title = item.account || '';
         row.querySelector('.operation-row__operation').title = operation;
         row.querySelector('.operation-row__suboperation').title = suboperation || '';
         if (hasNote) row.querySelector('.operation-row__note').fullText = item.memo;
+        for (const checkbox of row.querySelectorAll('[data-check]')) {
+            const superuser = checkbox.dataset.check === 'superuser';
+            checkbox.checked = Boolean(item[superuser ? 'is_checked_superuser' : 'is_checked_user']);
+            checkbox.disabled = superuser !== currentUser.can_view_protected;
+            checkbox.addEventListener('click', event => event.stopPropagation());
+            checkbox.addEventListener('change', async () => {
+                checkbox.disabled = true;
+                try {
+                    const result = await fetchJson(`/api/actions/${item.id}/check`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': currentUser.csrf_token },
+                        body: JSON.stringify({ checked: checkbox.checked }),
+                    });
+                    item.is_checked_user = result.is_checked_user;
+                    item.is_checked_superuser = result.is_checked_superuser;
+                    if (checkFilters[this.flow][superuser ? 'checked_superuser' : 'checked_user']) refresh();
+                } catch (error) {
+                    checkbox.checked = !checkbox.checked;
+                    status.textContent = error.message;
+                } finally {
+                    checkbox.disabled = superuser !== currentUser.can_view_protected;
+                }
+            });
+        }
         row.querySelector('.operation-row__date').addEventListener('click', event => {
             event.stopPropagation();
             openOperation(item);

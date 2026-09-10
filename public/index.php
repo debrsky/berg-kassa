@@ -53,6 +53,11 @@ try {
         if ($path === '/api/actions' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             writeAction($user);
         }
+        if (preg_match('#^/api/actions/([1-9][0-9]*)/check$#', $path, $match)) {
+            $_SERVER['REQUEST_METHOD'] === 'PATCH'
+                ? checkAction($user, (int) $match[1])
+                : jsonResponse(['error' => 'Method not allowed'], 405);
+        }
         if (preg_match('#^/api/actions/([1-9][0-9]*)$#', $path, $match)) {
             match ($_SERVER['REQUEST_METHOD']) {
                 'PUT' => writeAction($user, (int) $match[1]),
@@ -360,6 +365,18 @@ try {
             <span class="filter-bar__label">Подоперация 2</span>
             <select class="filter-bar__control" name="suboperation_l2_id"></select>
         </label>
+        <label class="filter-bar__field filter-bar__advanced filter-bar__marks">
+            <span class="filter-bar__label">Отметка пользователя</span>
+            <select class="filter-bar__control" name="checked_user">
+                <option value="">Все</option><option value="1">Поставлена</option><option value="0">Не поставлена</option>
+            </select>
+        </label>
+        <label class="filter-bar__field filter-bar__advanced filter-bar__marks">
+            <span class="filter-bar__label">Отметка суперпользователя</span>
+            <select class="filter-bar__control" name="checked_superuser">
+                <option value="">Все</option><option value="1">Поставлена</option><option value="0">Не поставлена</option>
+            </select>
+        </label>
         <?php if ($pageUser['can_view_protected']): ?>
         <label class="filter-bar__field filter-bar__field--checkbox filter-bar__advanced" id="protected-filter">
             <span class="filter-bar__checkbox-label">
@@ -374,7 +391,7 @@ try {
             <span class="filter-bar__label">Примечание</span>
             <input class="filter-bar__control" type="search" name="memo" maxlength="500" placeholder="Поиск по тексту" autocomplete="off">
         </label>
-        <button class="filter-bar__reset" type="button" id="reset-filters">Сбросить</button>
+        <button class="filter-bar__reset" type="button" id="reset-filters" title="Сбросить фильтры" aria-label="Сбросить фильтры">∅</button>
     </fieldset>
     </form>
 
@@ -397,8 +414,12 @@ try {
                 <span class="operation-panel__count" data-count>0</span>
             </header>
             <div class="operation-panel__columns-scroll" data-columns-scroll>
-                <div class="operation-panel__columns" aria-hidden="true">
-                    <span>Дата</span><span>Счёт</span><span>Операция</span><span>Подоперация</span><span>Сумма</span>
+                <div class="operation-panel__columns">
+                    <span>Дата</span><span>Счёт</span><span>Операция</span><span>Подоперация</span>
+                    <span class="operation-panel__check-filters">
+                        <label>П<button type="button" data-check-filter="checked_user" data-filter-flow="income">—</button></label>
+                        <label>С<button type="button" data-check-filter="checked_superuser" data-filter-flow="income">—</button></label>
+                    </span><span>Сумма</span>
                 </div>
             </div>
             <div class="operation-panel__body" tabindex="0" data-list aria-label="Приходные операции">
@@ -415,8 +436,12 @@ try {
                 <span class="operation-panel__count" data-count>0</span>
             </header>
             <div class="operation-panel__columns-scroll" data-columns-scroll>
-                <div class="operation-panel__columns" aria-hidden="true">
-                    <span>Дата</span><span>Счёт</span><span>Операция</span><span>Подоперация</span><span>Сумма</span>
+                <div class="operation-panel__columns">
+                    <span>Дата</span><span>Счёт</span><span>Операция</span><span>Подоперация</span>
+                    <span class="operation-panel__check-filters">
+                        <label>П<button type="button" data-check-filter="checked_user" data-filter-flow="expense">—</button></label>
+                        <label>С<button type="button" data-check-filter="checked_superuser" data-filter-flow="expense">—</button></label>
+                    </span><span>Сумма</span>
                 </div>
             </div>
             <div class="operation-panel__body" tabindex="0" data-list aria-label="Расходные операции">

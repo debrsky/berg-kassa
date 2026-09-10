@@ -86,7 +86,17 @@ function dateParameter(string $name, string $fallback): string
     return $value;
 }
 
-function filters(bool $withPeriod = true, bool $canViewProtected = false): array
+function booleanParameter(string $name): ?bool
+{
+    $value = $_GET[$name] ?? null;
+    if ($value === null || $value === '') return null;
+    if (!in_array($value, ['0', '1'], true)) {
+        throw new InvalidArgumentException("Invalid parameter: {$name}");
+    }
+    return $value === '1';
+}
+
+function filters(bool $withPeriod = true, bool $canViewProtected = false, string $checkPrefix = ''): array
 {
     $memo = $_GET['memo'] ?? '';
     if (!is_string($memo) || strlen($memo) > 2000) {
@@ -101,6 +111,8 @@ function filters(bool $withPeriod = true, bool $canViewProtected = false): array
         'action_type_id' => integerParameter('action_type_id'),
         'suboperation_l1_id' => integerParameter('suboperation_l1_id'),
         'suboperation_l2_id' => integerParameter('suboperation_l2_id'),
+        'checked_user' => booleanParameter($checkPrefix . 'checked_user'),
+        'checked_superuser' => booleanParameter($checkPrefix . 'checked_superuser'),
         'include_protected' => $canViewProtected && ($_GET['include_protected'] ?? '0') === '1',
     ];
     if ($withPeriod) {
@@ -128,6 +140,12 @@ function filterSql(array $filters, array &$params, bool $withPeriod): string
         if ($filters[$name] !== null) {
             $where[] = "{$column} = :{$name}";
             $params[$name] = $filters[$name];
+        }
+    }
+    foreach (['checked_user' => 'is_checked_user', 'checked_superuser' => 'is_checked_superuser'] as $name => $column) {
+        if ($filters[$name] !== null) {
+            $where[] = "a.{$column} = :{$name}";
+            $params[$name] = $filters[$name] ? 'true' : 'false';
         }
     }
     if (($filters['memo'] ?? '') !== '') {

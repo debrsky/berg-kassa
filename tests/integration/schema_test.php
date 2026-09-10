@@ -17,7 +17,7 @@ $check = function (bool $condition, string $message) use (&$passed): void {
 };
 
 $required = [
-    'actions' => ['id', 'account_id', 'currency_id', 'suboperation_id', 'action_date', 'amount', 'exchange_rate', 'is_debit', 'memo', 'is_black'],
+    'actions' => ['id', 'account_id', 'currency_id', 'suboperation_id', 'action_date', 'amount', 'exchange_rate', 'is_debit', 'memo', 'is_black', 'is_checked_user', 'is_checked_superuser'],
     'accounts' => ['id', 'name', 'currency_id'],
     'currencies' => ['id', 'name'],
     'currency_rates' => ['id', 'currency_id', 'rate_date', 'rate'],

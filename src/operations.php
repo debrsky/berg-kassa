@@ -187,13 +187,47 @@ function deleteAction(array $user, int $id): never
     jsonResponse(['ok' => true]);
 }
 
+function checkAction(array $user, int $id): never
+{
+    requireCsrf($user);
+    $body = json_decode(file_get_contents('php://input'), true, flags: JSON_THROW_ON_ERROR);
+    if (!is_array($body) || !array_key_exists('checked', $body) || !is_bool($body['checked'])) {
+        throw new InvalidArgumentException('Invalid field: checked');
+    }
+    $column = $user['can_view_protected'] ? 'is_checked_superuser' : 'is_checked_user';
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $statement = $pdo->prepare('SELECT * FROM actions WHERE id = :id'
+            . ($user['can_view_protected'] ? '' : ' AND is_black = false') . ' FOR UPDATE');
+        $statement->execute(['id' => $id]);
+        $old = $statement->fetch();
+        if (!$old) {
+            $pdo->rollBack();
+            jsonResponse(['error' => 'Operation not found or access denied'], 404);
+        }
+        $statement = $pdo->prepare("UPDATE actions SET {$column} = :checked WHERE id = :id RETURNING *");
+        $statement->execute(['checked' => $body['checked'] ? 'true' : 'false', 'id' => $id]);
+        $saved = $statement->fetch();
+        auditEvent('action.checked', $user, 'actions', $id, ['old' => $old, 'new' => $saved], pdo: $pdo);
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $error;
+    }
+    jsonResponse([
+        'is_checked_user' => (bool) $saved['is_checked_user'],
+        'is_checked_superuser' => (bool) $saved['is_checked_superuser'],
+    ]);
+}
+
 function actions(array $user): never
 {
-    $filters = filters(true, $user['can_view_protected']);
     $flow = $_GET['flow'] ?? '';
     if (!in_array($flow, ['income', 'expense'], true)) {
         throw new InvalidArgumentException('flow must be income or expense');
     }
+    $filters = filters(true, $user['can_view_protected'], $flow . '_');
     $offset = (string) ($_GET['offset'] ?? '0');
     $limit = (string) ($_GET['limit'] ?? '100');
     if (!ctype_digit($offset) || !ctype_digit($limit) || (int) $limit < 1 || (int) $limit > 200) {
@@ -218,6 +252,7 @@ function actions(array $user): never
         . "LIMIT {$limit} OFFSET {$offset}";
     $sql = 'WITH page AS (' . $page . ') SELECT a.id, a.account_id, a.currency_id, a.suboperation_id, '
         . 'a.action_date, a.amount, a.exchange_rate, a.is_debit, a.memo, a.is_black, '
+        . 'a.is_checked_user, a.is_checked_superuser, '
         . 'ac.name AS account, c.name AS currency, '
         . 'd.name AS direction, at.name AS action_type, s1.name AS suboperation_l1, '
         . 's2.name AS suboperation_l2, s2.is_placeholder AS suboperation_placeholder '
@@ -234,6 +269,23 @@ function summary(array $user): never
     $filters = filters(true, $user['can_view_protected']);
     $params = ['from_date' => $filters['from_date'], 'to_date' => $filters['to_date']];
     $where = filterSql($filters, $params, false);
+    $flowChecks = [];
+    foreach (['income' => 'a.is_debit', 'expense' => 'NOT a.is_debit'] as $flow => $direction) {
+        $checks = [$direction];
+        foreach (['checked_user' => 'is_checked_user', 'checked_superuser' => 'is_checked_superuser'] as $name => $column) {
+            $value = booleanParameter("{$flow}_{$name}");
+            if ($value !== null) {
+                $parameter = "{$flow}_{$name}";
+                $checks[] = "a.{$column} = :{$parameter}";
+                $params[$parameter] = $value ? 'true' : 'false';
+            }
+        }
+        $flowChecks[$flow] = $checks;
+    }
+    if (count($flowChecks['income']) > 1 || count($flowChecks['expense']) > 1) {
+        $where .= ' AND ((' . implode(' AND ', $flowChecks['income']) . ') OR ('
+            . implode(' AND ', $flowChecks['expense']) . '))';
+    }
     $base = ' FROM actions a ' . joins() . ' WHERE a.action_date < (:to_date::date + INTERVAL \'1 day\')' . $where;
     $measures = <<<'SQL'
         COALESCE(SUM(CASE WHEN a.action_date < :from_date THEN

@@ -61,6 +61,16 @@ function initAuth(PDO $pdo): void
         ALTER TABLE auth.users ALTER COLUMN data_schema SET NOT NULL;
         DROP TABLE IF EXISTS auth.user_schemas;
         DROP TABLE IF EXISTS auth.data_schemas;
+        DO $$
+        DECLARE data_schema_name text;
+        BEGIN
+            FOR data_schema_name IN
+                SELECT table_schema FROM information_schema.tables WHERE table_name = 'actions'
+            LOOP
+                EXECUTE format('ALTER TABLE %I.actions ADD COLUMN IF NOT EXISTS is_checked_user boolean NOT NULL DEFAULT false', data_schema_name);
+                EXECUTE format('ALTER TABLE %I.actions ADD COLUMN IF NOT EXISTS is_checked_superuser boolean NOT NULL DEFAULT false', data_schema_name);
+            END LOOP;
+        END $$;
     SQL);
 }
 

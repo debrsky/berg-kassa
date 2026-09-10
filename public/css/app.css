@@ -441,8 +441,13 @@
 }
 
 .filter-bar__reset {
+    width: var(--control-height);
     align-self: end;
+    justify-self: start;
+    padding: 0;
+    border-radius: 50%;
     color: var(--color-primary);
+    font-size: 1rem;
     font-weight: var(--font-weight-medium);
     cursor: pointer;
 }
@@ -451,6 +456,30 @@
     color: white;
     border-color: var(--color-primary);
     background: var(--color-primary);
+}
+
+@media (min-width: 800px) {
+    .filter-bar {
+        grid-template-columns: repeat(auto-fit, minmax(7rem, 9rem));
+        gap: var(--space-2);
+        padding: var(--space-3);
+    }
+
+    .filter-bar__field { gap: 0.125rem; }
+    .filter-bar__label { font-size: 0.72rem; }
+
+    .filter-bar__control,
+    .filter-bar__reset,
+    .filter-bar__checkbox-label {
+        min-height: 2rem;
+        font-size: 0.82rem;
+    }
+
+    .filter-bar__control { padding: 0 var(--space-2); }
+
+    .filter-bar__reset { width: 2rem; }
+
+    .filter-bar__marks { display: none; }
 }
 
 .operations-board {
@@ -577,7 +606,7 @@
 .operation-panel__columns,
 .operation-row {
     display: grid;
-    grid-template-columns: 6rem minmax(5.5rem, 0.7fr) minmax(7rem, 1.2fr) minmax(7rem, 1.2fr) minmax(6.5rem, 0.7fr);
+    grid-template-columns: 6rem minmax(5.5rem, 0.7fr) minmax(7rem, 1.2fr) minmax(7rem, 1.2fr) 5rem minmax(6.5rem, 0.7fr);
 }
 
 .operation-panel__columns-scroll {
@@ -587,7 +616,7 @@
 }
 
 .operation-panel__columns {
-    min-width: 36rem;
+    min-width: 41rem;
     color: var(--color-text);
     background: var(--color-surface-muted);
     font-size: 0.72rem;
@@ -596,9 +625,41 @@
     text-transform: uppercase;
 }
 
-.operation-panel__columns span {
+.operation-panel__columns > span {
     padding: var(--space-2) var(--space-3);
 }
+
+.operation-panel__check-filters {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+}
+
+.operation-panel__check-filters label {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+}
+
+.operation-panel__check-filters button {
+    display: grid;
+    width: 1.5rem;
+    min-height: 1.5rem;
+    padding: 0;
+    place-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: 50%;
+    color: var(--color-text);
+    background: var(--color-surface);
+    font-size: 0.68rem;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0;
+    text-transform: none;
+    cursor: pointer;
+}
+
+.operation-panel__check-filters button:hover { border-color: var(--color-primary); }
 
 .operation-panel__body {
     min-width: 0;
@@ -770,6 +831,24 @@
     font-variant-numeric: tabular-nums;
     text-align: right;
 }
+
+.operation-row__checks {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-2);
+}
+
+.operation-row__checks label {
+    display: grid;
+    gap: 0.1rem;
+    color: var(--color-text-muted);
+    font-size: 0.65rem;
+    text-align: center;
+    cursor: pointer;
+}
+
+.operation-row__checks input { margin: 0; }
+.operation-row__checks input:disabled { cursor: not-allowed; }
 
 .operation-panel__message {
     position: absolute;
@@ -993,6 +1072,15 @@
     text-transform: uppercase;
 }
 
+.summary-filter-note {
+    display: block;
+    color: var(--color-text-muted);
+    font-size: 0.65rem;
+    font-weight: var(--font-weight-medium);
+    line-height: 1.2;
+    text-transform: none;
+}
+
 .summary-table__value--income {
     color: var(--color-income);
 }
@@ -1156,9 +1244,6 @@
 @media (max-width: 1199px) {
     .users-manager {
         grid-template-columns: 1fr;
-    }
-    .filter-bar {
-        grid-template-columns: repeat(3, minmax(9rem, 1fr));
     }
 
     .audit-filter {
@@ -1437,7 +1522,7 @@
 
     .operation-row {
         height: 128px;
-        grid-template: "date amount" 1.5rem "account amount" 1.35rem "operation operation" 1.45rem "suboperation suboperation" minmax(0, 1fr) / minmax(0, 1fr) auto;
+        grid-template: "date checks amount" 1.5rem "account checks amount" 1.35rem "operation operation operation" 1.45rem "suboperation suboperation suboperation" minmax(0, 1fr) / minmax(0, 1fr) auto auto;
         align-content: stretch;
         padding: var(--space-2) 0;
     }
@@ -1474,6 +1559,7 @@
     }
 
     .operation-row__suboperation { grid-area: suboperation; }
+    .operation-row__checks { grid-area: checks; align-self: center; }
     .operation-row__amount {
         grid-area: amount;
         align-self: center;
