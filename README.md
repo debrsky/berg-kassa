@@ -40,6 +40,7 @@ Remove-Item Env:NEW_USER_PASSWORD
 
 ```dotenv
 MSSQL_MIGRATIONS=trading:vl,khb_trading:khb,uss_trading:uss
+MSSQL_CLEAR_PROTECTED=khb_trading,uss_trading
 ```
 
 ```powershell

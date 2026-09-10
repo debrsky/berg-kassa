@@ -2,10 +2,34 @@ import os
 import unittest
 from unittest.mock import patch
 
-from migrate_trading import migrations, remove_unused_references
+from migrate_trading import (
+    clear_protected_actions,
+    clear_protected_databases,
+    migrations,
+    remove_unused_references,
+)
 
 
 class RemoveUnusedReferencesTest(unittest.TestCase):
+    def test_clear_protected_databases_parses_exact_names(self):
+        with patch.dict(
+            os.environ,
+            {"MSSQL_CLEAR_PROTECTED": " khb_trading,USS_TRADING,, "},
+            clear=True,
+        ):
+            self.assertEqual(
+                clear_protected_databases(), {"khb_trading", "uss_trading"}
+            )
+
+    def test_clear_protected_actions_changes_only_last_column(self):
+        data = {"actions": [(1, "protected", True), (2, "regular", False)]}
+
+        clear_protected_actions(data)
+
+        self.assertEqual(
+            data["actions"], [(1, "protected", False), (2, "regular", False)]
+        )
+
     def test_migrations_preserve_configured_order(self):
         with patch.dict(
             os.environ,

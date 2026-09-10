@@ -178,6 +178,18 @@ def migrations() -> list[tuple[str, str]]:
     return result
 
 
+def clear_protected_databases() -> set[str]:
+    return {
+        database.strip().casefold()
+        for database in os.getenv("MSSQL_CLEAR_PROTECTED", "").split(",")
+        if database.strip()
+    }
+
+
+def clear_protected_actions(data: dict[str, list[tuple]]) -> None:
+    data["actions"] = [row[:-1] + (False,) for row in data["actions"]]
+
+
 def mssql_connection(database: str):
     import pymssql
 
@@ -420,9 +432,13 @@ def main() -> None:
     )
     args = parser.parse_args()
     load_env(args.env)
+    databases_without_protected = clear_protected_databases()
     for database, schema in migrations():
         print(f"\n{database} -> {schema}")
         data = read_source(database)
+        if database.casefold() in databases_without_protected:
+            clear_protected_actions(data)
+            print("protected action flags cleared")
         source_counts = {table.target: len(data[table.target]) for table in TABLES}
         kept_counts = remove_unused_references(data)
         for table in TABLES:
