@@ -116,6 +116,10 @@ function updateUrl(params) {
     history.replaceState(null, '', params.size ? `?${params}` : location.pathname);
 }
 
+function automaticRecord(records, allowDashes = true) {
+    return (allowDashes && records.find(item => /^-+$/.test(item.name))) || (records.length === 1 ? records[0] : null);
+}
+
 function fillSelect(name) {
     const select = form.elements[name];
     const [source, parent] = lookupFields[name];
@@ -129,7 +133,7 @@ function fillSelect(name) {
         select.add(new Option(label, item.id));
     }
     select.value = records.some(item => String(item.id) === selected) ? selected : '';
-    if (!select.value && records.length === 1) select.value = records[0].id;
+    if (!select.value) select.value = automaticRecord(records, name !== 'direction_id')?.id ?? '';
     delete select.dataset.value;
 }
 
@@ -251,7 +255,7 @@ function editorOptions(name, source, parentName, parentField) {
         const label = item.is_placeholder ? `Неизвестно (ID: ${item.id})` : (item.name || `ID: ${item.id}`);
         select.add(new Option(label, item.id));
     }
-    if (records.length === 1) select.value = records[0].id;
+    select.value = automaticRecord(records, name !== 'direction_id')?.id ?? '';
 }
 
 function refreshEditorCascade(from = 'direction_id') {

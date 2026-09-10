@@ -413,6 +413,37 @@ test('каскад не предлагает несовместимые уров
     expect(actual).toEqual(expected);
 });
 
+test('каскад автоматически выбирает уровни из дефисов', async ({ page }) => {
+    const lookups = await (await page.request.get('/api/lookups')).json();
+    const direction = { id: 2000000000, name: 'Тест автоподстановки' };
+    const ids = { action: 2000000001, sub1: 2000000002, sub2: 2000000003 };
+    lookups.directions.push(direction);
+    lookups.directions.push({ id: 2000000007, name: '---' });
+    lookups.action_types.push({ id: ids.action, direction_id: direction.id, name: '---' });
+    lookups.action_types.push({ id: 2000000004, direction_id: direction.id, name: 'Другой вариант' });
+    lookups.suboperations_l1.push({ id: ids.sub1, action_type_id: ids.action, name: '--' });
+    lookups.suboperations_l1.push({ id: 2000000005, action_type_id: ids.action, name: 'Другой вариант' });
+    lookups.suboperations_l2.push({ id: ids.sub2, suboperation_l1_id: ids.sub1, name: '-' });
+    lookups.suboperations_l2.push({ id: 2000000006, suboperation_l1_id: ids.sub1, name: 'Другой вариант' });
+    await page.route('**/api/lookups', route => route.fulfill({ json: lookups }));
+    await page.reload();
+    await expect(page.locator('#status')).toContainText('Найдено');
+
+    const filters = page.locator('#filters');
+    await expect(filters.locator('[name="direction_id"]')).toHaveValue('');
+    await filters.locator('[name="direction_id"]').selectOption(String(direction.id));
+    await expect(filters.locator('[name="action_type_id"]')).toHaveValue(String(ids.action));
+    await expect(filters.locator('[name="suboperation_l1_id"]')).toHaveValue(String(ids.sub1));
+    await expect(filters.locator('[name="suboperation_l2_id"]')).toHaveValue(String(ids.sub2));
+
+    await page.locator('[data-add-flow="income"]').click();
+    const dialog = page.locator('#operation-form');
+    await expect(dialog.locator('[name="direction_id"]')).toHaveValue(String(direction.id));
+    await expect(dialog.locator('[name="action_type_id"]')).toHaveValue(String(ids.action));
+    await expect(dialog.locator('[name="suboperation_l1_id"]')).toHaveValue(String(ids.sub1));
+    await expect(dialog.locator('[name="suboperation_id"]')).toHaveValue(String(ids.sub2));
+});
+
 test('проводка раскрывается и фильтрует подоперации 2', async ({ page }) => {
     const lookups = await (await page.request.get('/api/lookups')).json();
     const sub1 = lookups.suboperations_l1.find(item => lookups.suboperations_l2.some(child => String(child.suboperation_l1_id) === String(item.id)));
