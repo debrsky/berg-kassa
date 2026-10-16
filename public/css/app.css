@@ -865,7 +865,7 @@
 }
 
 .operation-dialog {
-    width: min(46rem, calc(100% - 2rem));
+    width: min(60rem, calc(100% - 2rem));
     max-height: calc(100vh - 2rem);
     padding: 0;
     overflow: auto;
@@ -881,7 +881,7 @@
 }
 
 .operation-form {
-    padding: var(--space-5);
+    padding: var(--space-4);
 }
 
 .operation-form__header,
@@ -893,7 +893,7 @@
 
 .operation-form__header {
     justify-content: space-between;
-    margin-bottom: var(--space-4);
+    margin-bottom: var(--space-2);
 }
 
 .operation-form__title {
@@ -921,12 +921,12 @@
 .operation-form__grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-3);
+    gap: var(--space-2);
 }
 
 .operation-form__section {
     grid-column: 1 / -1;
-    margin: var(--space-2) 0 0;
+    margin: 0;
     padding-bottom: var(--space-1);
     border-bottom: 1px solid var(--color-border);
     color: var(--color-heading);
@@ -943,7 +943,7 @@
 
 .operation-form__currency {
     display: grid;
-    grid-column: 1 / -1;
+    grid-column: span 2;
     grid-template-columns: 2fr 1fr;
     gap: var(--space-2);
 }
@@ -957,7 +957,8 @@
 .operation-form__field select,
 .operation-form__field textarea {
     width: 100%;
-    padding: var(--space-2) var(--space-3);
+    min-width: 0;
+    padding: var(--space-1) var(--space-2);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     color: var(--color-text);
@@ -981,7 +982,7 @@
 .operation-form__posting {
     grid-column: 1 / -1;
     margin: 0;
-    padding: var(--space-3);
+    padding: var(--space-2);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
 }
@@ -1006,8 +1007,25 @@
     font-size: var(--font-size-sm);
 }
 
+.operation-form__error:empty {
+    display: none;
+}
+
 .operation-form__actions {
     justify-content: flex-end;
+    margin-top: var(--space-2);
+}
+
+@media (min-width: 800px) {
+    .operation-form {
+        --control-height: 2rem;
+    }
+}
+
+@media (min-width: 1000px) {
+    .operation-form__grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
 }
 
 .operation-form__cancel,
@@ -1496,6 +1514,10 @@
 
     .operation-form__grid {
         grid-template-columns: 1fr;
+    }
+
+    .operation-form__currency {
+        grid-column: 1 / -1;
     }
 
     .operation-form__posting-fields {

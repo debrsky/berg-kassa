@@ -68,6 +68,34 @@ test.beforeEach(async ({ page }) => {
     await expect(page.locator('#status')).toContainText('Найдено');
 });
 
+test('дата новой операции учитывает применённый период фильтра', async ({ page }) => {
+    const now = await page.evaluate(() => new Date(2026, 5, 15, 14, 35).getTime());
+    await page.clock.setFixedTime(now);
+    const cases = [
+        ['2026-06-01', '2026-06-30', '2026-06-15'],
+        ['2026-06-15', '2026-06-15', '2026-06-15'],
+        ['2026-05-01', '2026-05-31', '2026-05-31'],
+        ['2026-07-01', '2026-07-31', '2026-07-31'],
+        ['', '2026-05-31', '2026-05-31'],
+        ['', '2026-07-31', '2026-06-15'],
+        ['2026-07-01', '', '2026-06-15'],
+        ['', '', '2026-06-15'],
+    ];
+    for (const [from_date, to_date, expected] of cases) {
+        await page.goto('/?' + new URLSearchParams({ from_date, to_date }));
+        await expect(page.locator('#status')).toContainText('Найдено');
+        for (const flow of ['income', 'expense']) {
+            if (await page.locator('.operations-tabs').isVisible()) {
+                await page.locator(`[data-flow-tab="${flow}"]`).click();
+            }
+            await page.locator(`[data-add-flow="${flow}"]`).click();
+            const time = expected === '2026-06-15' ? '14:35' : '00:00';
+            await expect(page.locator('#operation-form [name=action_date]')).toHaveValue(`${expected}T${time}`);
+            await page.locator('#operation-dialog [data-close-dialog]').first().click();
+        }
+    }
+});
+
 test('ошибка выхода объявляется и позволяет повторить выход', async ({ page }) => {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -324,12 +352,33 @@ test('ссылка на управление пользователями соо
     await expect(page.locator('#user-rows tr')).not.toHaveCount(0);
 });
 
+test('форма операции помещается по высоте на экране компьютера', async ({ page }) => {
+    test.skip((page.viewportSize()?.width ?? 0) < 800, 'Десктопная компоновка');
+    for (const [width, height] of [[1024, 768], [1366, 768], [1280, 720]]) {
+        await page.setViewportSize({ width, height });
+        await page.locator('[data-add-flow="income"]').click();
+        const dialog = page.locator('#operation-dialog');
+        const fits = () => dialog.evaluate(element =>
+            element.scrollHeight <= element.clientHeight && element.scrollWidth <= element.clientWidth);
+        expect(await fits()).toBe(true);
+        await page.locator('#operation-posting > summary').click();
+        await expect(page.locator('#operation-posting')).toHaveAttribute('open', '');
+        expect(await fits()).toBe(true);
+        await page.locator('#operation-form-error').evaluate(element => { element.textContent = 'Проверьте обязательные поля'; });
+        expect(await fits()).toBe(true);
+        await page.getByRole('button', { name: 'Закрыть', exact: true }).click();
+    }
+});
+
 test('дата открывает редактор существующей операции', async ({ page }) => {
     const dateButton = page.getByRole('button', { name: /Редактировать операцию от/ }).first();
     await expect(dateButton).toBeVisible();
     await dateButton.click();
     await expect(page.locator('#operation-dialog')).toBeVisible();
     await expect(page.locator('#delete-operation')).toBeVisible();
+    if ((page.viewportSize()?.width ?? 0) >= 1000) {
+        expect(await page.locator('#operation-dialog').evaluate(element => element.scrollHeight <= element.clientHeight)).toBe(true);
+    }
 });
 
 test('фильтр сохраняется в URL и восстанавливается после перезагрузки', async ({ page }) => {

@@ -513,7 +513,7 @@ try {
             <h3 class="operation-form__section">Дополнительно</h3>
             <label class="operation-form__field operation-form__field--wide">
                 <span>Примечание</span>
-                <textarea name="memo" rows="3"></textarea>
+                <textarea name="memo" rows="2"></textarea>
             </label>
             <?php if ($pageUser['can_view_protected']): ?>
             <label class="operation-form__protected" id="operation-protected-field">

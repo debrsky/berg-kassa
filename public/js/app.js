@@ -324,12 +324,23 @@ function localDateTime(value = new Date()) {
     return local.toISOString().slice(0, 16);
 }
 
+function newOperationDateTime() {
+    const now = localDateTime();
+    const today = now.slice(0, 10);
+    const from = appliedFilters.get('from_date');
+    const to = appliedFilters.get('to_date');
+    if (to && ((from && today < from) || today > to)) {
+        return to + 'T00:00';
+    }
+    return now;
+}
+
 function openOperation(item = null, isDebit = true) {
     operationForm.reset();
     operationForm.querySelector('[name="id"]').value = item?.id || '';
     operationForm.elements.action_date.value = item?.action_date
         ? String(item.action_date).replace(' ', 'T').slice(0, 16)
-        : localDateTime();
+        : newOperationDateTime();
     operationForm.elements.is_debit.value = String(item?.is_debit ?? isDebit);
     operationForm.elements.amount.value = item?.amount ?? '';
     operationForm.elements.memo.value = item?.memo ?? '';
