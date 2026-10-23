@@ -185,9 +185,10 @@ function clearDescendants(name) {
     for (const child of order.slice(index + 1)) form.elements[child].value = '';
 }
 
-function refreshCascade(from = 'direction_id') {
+function refreshCascade(from = 'direction_id', includeSelf = true) {
     const order = ['direction_id', 'action_type_id', 'suboperation_l1_id', 'suboperation_l2_id'];
-    for (const name of order.slice(Math.max(0, order.indexOf(from)))) fillSelect(name);
+    const start = Math.max(0, order.indexOf(from)) + (includeSelf ? 0 : 1);
+    for (const name of order.slice(start)) fillSelect(name);
 }
 
 async function refresh() {
@@ -516,7 +517,7 @@ form.addEventListener('change', event => {
     const hierarchy = ['direction_id', 'action_type_id', 'suboperation_l1_id', 'suboperation_l2_id'];
     if (hierarchy.includes(event.target.name)) {
         clearDescendants(event.target.name);
-        refreshCascade('action_type_id');
+        refreshCascade(event.target.name, false);
     }
     if (['checked_user', 'checked_superuser'].includes(event.target.name)) {
         const flow = document.querySelector('.operations-tabs__tab--active').dataset.flowTab;

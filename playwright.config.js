@@ -7,12 +7,12 @@ module.exports = defineConfig({
     timeout: 30_000,
     reporter: [['list'], ['html', { open: 'never' }]],
     use: {
-        baseURL: process.env.E2E_BASE_URL || 'http://127.0.0.1:8090',
+        baseURL: process.env.E2E_BASE_URL || 'http://127.0.0.1:18090',
         trace: 'retain-on-failure',
     },
     webServer: process.env.E2E_BASE_URL ? undefined : {
-        command: '.\\.tools\\php\\php.exe -S 127.0.0.1:8090 -t public public\\router.php',
-        url: 'http://127.0.0.1:8090/login',
+        command: '.\\.tools\\php\\php.exe -S 127.0.0.1:18090 -t public public\\router.php',
+        url: 'http://127.0.0.1:18090/login',
         reuseExistingServer: true,
     },
     projects: [

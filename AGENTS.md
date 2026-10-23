@@ -21,7 +21,7 @@
 
 ## Запуск и проверки
 
-Проект ориентирован на Windows/PowerShell. Локальный PHP: `.tools/php/php.exe`; запуск: `./start-local.cmd` (порт 8080). Требуются настроенный `.env` и PostgreSQL; E2E используют учётные записи `E2E_*` из окружения. Playwright по умолчанию сам поднимает PHP-сервер на порту 8090 (`playwright.config.js`).
+Проект ориентирован на Windows/PowerShell. Локальный PHP: `.tools/php/php.exe`; запуск: `./start-local.cmd` (порт 8080). Требуются настроенный `.env` и PostgreSQL; E2E используют учётные записи `E2E_*` из окружения. Playwright по умолчанию сам поднимает PHP-сервер на порту 18090 (`playwright.config.js`).
 
 - Все проверки: `npm test` (статика, PHP unit, интеграция с БД, Playwright). Предварительно: `npm install` и `npx playwright install chromium`.
 - Выборочно: `npm run test:static`, `npm run test:unit`, `npm run test:integration`, `npm run test:e2e`; Python-тесты: `python -m unittest discover -s tests -p 'test_*.py'`.

@@ -489,6 +489,7 @@ test('каскад автоматически выбирает уровни из
     await page.reload();
     await expect(page.locator('#status')).toContainText('Найдено');
 
+    await expandFilters(page);
     const filters = page.locator('#filters');
     await expect(filters.locator('[name="direction_id"]')).toHaveValue('');
     await filters.locator('[name="direction_id"]').selectOption(String(direction.id));
@@ -503,6 +504,54 @@ test('каскад автоматически выбирает уровни из
     await expect(dialog.locator('[name="suboperation_l1_id"]')).toHaveValue(String(ids.sub1));
     await expect(dialog.locator('[name="suboperation_id"]')).toHaveValue(String(ids.sub2));
 });
+
+for (const singleOption of [false, true]) {
+    test(`каскад сохраняет ручной выбор «Все»: ${singleOption ? 'единственный вариант' : 'вариант из дефисов'}`, async ({ page }) => {
+        const lookups = await (await page.request.get('/api/lookups')).json();
+        const names = ['direction_id', 'action_type_id', 'suboperation_l1_id', 'suboperation_l2_id'];
+        const sources = ['directions', 'action_types', 'suboperations_l1', 'suboperations_l2'];
+        const ids = [2000000100, 2000000101, 2000000102, 2000000103];
+        sources.forEach((source, index) => {
+            const parent = index ? { [names[index - 1]]: ids[index - 1] } : {};
+            lookups[source].push({ id: ids[index], name: singleOption ? 'Единственный вариант' : '---', ...parent });
+            if (index && !singleOption) {
+                lookups[source].push({ id: ids[index] + 10, name: 'Другой вариант', ...parent });
+            }
+        });
+        await page.route('**/api/lookups', route => route.fulfill({ json: lookups }));
+        await page.reload();
+        await expect(page.locator('#status')).toContainText('Найдено');
+        await expandFilters(page);
+        const filters = page.locator('#filters');
+        const field = index => filters.locator(`[name="${names[index]}"]`);
+        await field(0).selectOption(String(ids[0]));
+
+        for (let index = 3; index >= 1; index--) {
+            await expect(field(index)).toHaveValue(String(ids[index]));
+            await field(index).selectOption('');
+            await expect(field(index)).toHaveValue('');
+            for (let parent = 0; parent < index; parent++) {
+                await expect(field(parent)).toHaveValue(String(ids[parent]));
+            }
+            for (let child = index + 1; child < names.length; child++) {
+                await expect(field(child)).toHaveValue('');
+                await expect(field(child)).toBeDisabled();
+            }
+            // Изменение несвязанного фильтра не должно отменять ручной выбор.
+            await filters.locator('[name="memo"]').fill('проверка');
+            await filters.locator('[name="memo"]').press('Enter');
+            await expect(field(index)).toHaveValue('');
+            await filters.locator('[name="memo"]').fill('');
+
+            // Повторный выбор родителя снова запускает автовыбор потомков.
+            await field(index).selectOption(String(ids[index]));
+            for (let child = index + 1; child < names.length; child++) {
+                await expect(field(child)).toHaveValue(String(ids[child]));
+                await expect(field(child)).toBeEnabled();
+            }
+        }
+    });
+}
 
 test('проводка раскрывается и фильтрует подоперации 2', async ({ page }) => {
     const lookups = await (await page.request.get('/api/lookups')).json();
