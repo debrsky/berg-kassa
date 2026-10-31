@@ -102,6 +102,11 @@ check(printMoney('-1234.00') === '-1 234,00', 'Negative balance formatting');
 check(printMoney(null) === '—', 'Missing amount formatting');
 check(printAmountCharacters([]) === 8, 'Empty report keeps readable amount columns');
 check(printAmountCharacters([['amount' => null], ['amount' => '99999999999999999.99']]) === 25, 'Amount columns accommodate the full largest amount');
+check(printAmountCharacters([['amount' => '-99999999999999999.99']]) === 26, 'Negative legacy amounts include space for their sign');
+$printCss = file_get_contents(dirname(__DIR__, 2) . '/public/css/print.css');
+foreach (range(8, 26) as $characters) {
+    check(str_contains($printCss, ".amount-column--{$characters} { width: calc({$characters}ch + 2mm); }"), 'Every supported amount width has an external CSS class');
+}
 check(printEscape('<script>"&') === '&lt;script&gt;&quot;&amp;', 'Print text is escaped');
 check(printClassificationMarkers([]) === [], 'No classification references without filters');
 check(printClassificationMarkers(['direction_id' => 7, 'action_type_id' => null, 'suboperation_l1_id' => 3]) === ['direction' => '①', 'suboperation_l1' => '③'], 'Only explicitly selected levels receive stable symbols');

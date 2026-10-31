@@ -41,4 +41,10 @@ foreach (['direction_id' => '① Направление: Направление'
     'suboperation_l1_id' => '③ Подоперация 1: Уровень 1', 'suboperation_l2_id' => '④ Подоперация 2: Уровень 2'] as $key => $label) {
     if (in_array($key, $selected, true)) $report['labels'][] = $label;
 }
+if (in_array($mode, ['small', 'negative'], true)) {
+    $amount = $mode === 'small' ? '123.45' : '-99999999999999999.99';
+    $report['items'] = array_map(fn (array $operation): array => array_replace($operation, ['amount' => $amount]), $report['items']);
+    $report['summary']['currencies'][0]['income'] = $amount;
+    $report['summary']['currencies'][0]['expense'] = $amount;
+}
 require dirname(__DIR__, 3) . '/src/print-template.php';

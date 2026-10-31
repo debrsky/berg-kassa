@@ -47,6 +47,8 @@ $check($report['summary']['currencies'][0]['income'] === '10010.00', 'Exact inco
 $check($report['summary']['currencies'][0]['expense'] === '10010.00', 'Exact expense total');
 $html = $render($report);
 $check(substr_count($html, 'data-operation-id') === 2000, 'Template renders full selection');
+$check(!str_contains($html, ' style='), 'Report does not emit inline styles blocked by hosting CSP');
+$check(substr_count($html, 'amount-column amount-column--8') === 2, 'Both money columns use the matching external width class');
 $check(str_contains($html, '&lt;script&gt;тест&lt;/script&gt;') && !str_contains($html, '<script>тест'), 'Template escapes operation memo');
 $check(str_contains($html, '15.01.26 12:00') && !str_contains($html, '15.01.2026 12:00'), 'Compact date keeps time');
 $check(str_contains($html, 'Направление → Операция → Уровень 1 → Уровень 2'), 'Classification is rendered as a complete inline chain');

@@ -21,6 +21,26 @@ thead th { border-top: 0.5px solid #777; border-bottom: 0.5px solid #777; }
 .date-column { width: 28mm; }
 .account-column { width: 24mm; }
 .check-column { width: 8mm; }
+/* Match printAmountCharacters(): numeric(19,2), grouping spaces and optional minus. */
+.amount-column--8 { width: calc(8ch + 2mm); }
+.amount-column--9 { width: calc(9ch + 2mm); }
+.amount-column--10 { width: calc(10ch + 2mm); }
+.amount-column--11 { width: calc(11ch + 2mm); }
+.amount-column--12 { width: calc(12ch + 2mm); }
+.amount-column--13 { width: calc(13ch + 2mm); }
+.amount-column--14 { width: calc(14ch + 2mm); }
+.amount-column--15 { width: calc(15ch + 2mm); }
+.amount-column--16 { width: calc(16ch + 2mm); }
+.amount-column--17 { width: calc(17ch + 2mm); }
+.amount-column--18 { width: calc(18ch + 2mm); }
+.amount-column--19 { width: calc(19ch + 2mm); }
+.amount-column--20 { width: calc(20ch + 2mm); }
+.amount-column--21 { width: calc(21ch + 2mm); }
+.amount-column--22 { width: calc(22ch + 2mm); }
+.amount-column--23 { width: calc(23ch + 2mm); }
+.amount-column--24 { width: calc(24ch + 2mm); }
+.amount-column--25 { width: calc(25ch + 2mm); }
+.amount-column--26 { width: calc(26ch + 2mm); }
 .operation-check { text-align: center; white-space: nowrap; overflow-wrap: normal; }
 .money { text-align: right; font-variant-numeric: tabular-nums; }
 .operations .money, .operation-date { white-space: nowrap; overflow-wrap: normal; }

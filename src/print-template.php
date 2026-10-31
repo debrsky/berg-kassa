@@ -43,10 +43,10 @@
     <table class="operations">
         <caption>Приход и расход, дата и ID по убыванию. <span class="report-legend">П✓ — отметка пользователя, А✓ — администратора; пусто — не поставлена; З — защищённая.<?php if ($classificationMarkers): ?> ①–④ в назначении — ссылки на выбранные фильтры в шапке.<?php endif; ?></span></caption>
         <colgroup><col class="date-column"><col class="account-column"><col><col><col class="check-column" span="2">
-            <col class="amount-column" style="width: calc(<?= $amountCharacters ?>ch + 2mm)">
-            <col class="amount-column" style="width: calc(<?= $amountCharacters ?>ch + 2mm)">
+            <col class="amount-column amount-column--<?= $amountCharacters ?>">
+            <col class="amount-column amount-column--<?= $amountCharacters ?>">
         </colgroup>
-        <thead><tr><th scope="col">Дата / №</th><th scope="col">Счёт / валюта</th><th scope="col">Назначение</th><th scope="col">Примечание</th><th class="operation-check" scope="col" aria-label="Отметка пользователя" title="Отметка пользователя">П</th><th class="operation-check" scope="col" aria-label="Отметка администратора" title="Отметка администратора">А</th><th scope="col">Приход</th><th scope="col">Расход</th></tr></thead>
+        <thead><tr><th scope="col">Дата / №</th><th scope="col">Счёт / валюта</th><th scope="col">Назначение</th><th scope="col">Примечание</th><th class="operation-check" scope="col" aria-label="Отметка пользователя" title="Отметка пользователя">П</th><th class="operation-check" scope="col" aria-label="Отметка администратора" title="Отметка администратора">А</th><th class="money" scope="col">Приход</th><th class="money" scope="col">Расход</th></tr></thead>
         <tbody>
         <?php foreach ($report['items'] as $item): ?>
         <tr data-operation-id="<?= (int) $item['id'] ?>">
@@ -69,7 +69,7 @@
     <h2>Итоги и сальдо по валютам</h2>
     <div class="table-scroll">
     <table class="totals">
-        <thead><tr><th scope="col">Валюта</th><th scope="col">Начальное</th><th scope="col">Приход</th><th scope="col">Расход</th><th scope="col">За период</th><th scope="col">Конечное</th></tr></thead>
+        <thead><tr><th scope="col">Валюта</th><th class="money" scope="col">Начальное</th><th class="money" scope="col">Приход</th><th class="money" scope="col">Расход</th><th class="money" scope="col">За период</th><th class="money" scope="col">Конечное</th></tr></thead>
         <tbody>
         <?php foreach ($report['summary']['currencies'] as $row): ?>
         <tr><th scope="row"><?= printEscape($row['currency'] ?? '—') ?></th>

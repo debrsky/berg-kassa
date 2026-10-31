@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
+const { readFileSync } = require('node:fs');
 
 const login = process.env.E2E_USER;
 const password = process.env.E2E_PASSWORD;
@@ -48,6 +49,58 @@ test('компактная печатная таблица сохраняет б
     expect(layout.compactRowHeight).toBeLessThan(100);
     const pdf = await page.pdf({ preferCSSPageSize: true });
     expect(pdf.length).toBeGreaterThan(1000);
+});
+
+test('ширины колонок и заголовки одинаковы с CSP хостинга и без неё', async ({ page }) => {
+    const policy = readFileSync(path.resolve('public/.htaccess'), 'utf8').match(/Header always set Content-Security-Policy "([^"]+)"/)?.[1];
+    expect(policy, 'Проверяется фактическая CSP из конфигурации хостинга').toBeTruthy();
+    await page.setViewportSize({ width: 703, height: 1000 });
+    await page.addInitScript(() => {
+        window.cspViolations = [];
+        document.addEventListener('securitypolicyviolation', event => window.cspViolations.push(event.violatedDirective));
+    });
+    for (const [mode, characters] of [['small', 8], ['', 25], ['negative', 26]]) {
+        const html = execFileSync(path.resolve('.tools/php/php.exe'), [path.join(__dirname, 'fixtures/print-report.php'), mode], { encoding: 'utf8' });
+        const baseline = {};
+        for (const protectedMode of [false, true]) {
+            const url = `/print/csp-fixture-${mode || 'max'}-${protectedMode}`;
+            await page.route(`**${url}`, route => route.fulfill({
+                contentType: 'text/html; charset=utf-8', body: html,
+                headers: protectedMode ? { 'Content-Security-Policy': policy } : {},
+            }));
+            const response = await page.goto(url);
+            if (protectedMode) expect(response.headers()['content-security-policy']).toBe(policy);
+            await expect(page.locator('[style]')).toHaveCount(0);
+            await expect(page.locator(`.amount-column--${characters}`)).toHaveCount(2);
+            for (const media of ['screen', 'print']) {
+                await page.emulateMedia({ media });
+                const dimensions = await page.evaluate(() => ({
+                    columns: [...document.querySelectorAll('.amount-column')].map(column => getComputedStyle(column).width),
+                    headerAlignments: [...document.querySelectorAll('thead th')].map(cell => getComputedStyle(cell).textAlign),
+                    bodyAlignments: [...document.querySelectorAll('tbody tr:first-child > *')].map(cell => {
+                        const align = getComputedStyle(cell).textAlign;
+                        return align === 'start' ? 'left' : align;
+                    }),
+                    headers: [...document.querySelectorAll('.operations thead th')].map(cell => {
+                        const rect = cell.getBoundingClientRect();
+                        return { width: rect.width, height: rect.height };
+                    }),
+                    numbersFit: [...document.querySelectorAll('.operations .money')].every(cell => cell.scrollWidth <= cell.clientWidth),
+                }));
+                expect(dimensions.numbersFit).toBe(true);
+                expect(dimensions.headerAlignments).toEqual(['left', 'left', 'left', 'left', 'center', 'center', 'right', 'right',
+                    'left', 'right', 'right', 'right', 'right', 'right']);
+                expect(dimensions.headerAlignments).toEqual(dimensions.bodyAlignments);
+                if (protectedMode) expect(dimensions).toEqual(baseline[media]);
+                else baseline[media] = dimensions;
+            }
+            expect(await page.evaluate(() => window.cspViolations)).toEqual([]);
+            if (protectedMode) {
+                const pdf = await page.pdf({ preferCSSPageSize: true });
+                expect(pdf.length).toBeGreaterThan(1000);
+            }
+        }
+    }
 });
 
 test('выбранные уровни назначения ссылаются на фильтры в шапке', async ({ page }) => {
