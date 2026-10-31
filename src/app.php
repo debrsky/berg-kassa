@@ -25,6 +25,18 @@ function loadEnv(string $path): void
     }
 }
 
+function configureAppTimezone(): void
+{
+    $timezone = trim((string) getenv('APP_TIMEZONE'));
+    if ($timezone === '') {
+        return; // Preserve the PHP/server timezone for existing installations.
+    }
+    if (!in_array($timezone, DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC), true)) {
+        throw new RuntimeException('Invalid APP_TIMEZONE: use an IANA timezone such as Asia/Vladivostok');
+    }
+    date_default_timezone_set($timezone);
+}
+
 function env(string $name): string
 {
     $value = getenv($name);
@@ -203,5 +215,6 @@ function lookups(): never
 }
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/operation-settings.php';
 require_once __DIR__ . '/references.php';
 require_once __DIR__ . '/operations.php';

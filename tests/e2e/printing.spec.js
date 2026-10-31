@@ -29,9 +29,11 @@ test('компактная печатная таблица сохраняет б
     await expect(page.locator('.classification').first()).toHaveText('Направление → Операция → Уровень 1 → Уровень 2');
     await expect(page.locator('.memo').last()).toContainText('КОНЕЦ ПРИМЕЧАНИЯ');
     await expect(page.locator('.report-legend')).toContainText('З — защищённая');
+    await expect(page.locator('#report-author')).toHaveText('print-test-user');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.setViewportSize({ width: 703, height: 1000 }); // A4 minus 12 mm margins, at 96 dpi.
     await page.emulateMedia({ media: 'print' });
+    await expect(page.locator('#report-author')).toBeVisible();
     await expect(page.locator('.operations')).toHaveCSS('font-size', '10.6667px');
     await expect(page.locator('.operation-meta').first()).toHaveCSS('font-size', '9.33333px');
     await expect(page.locator('.operations tbody td').first()).toHaveCSS('border-left-width', '0px');
@@ -172,6 +174,7 @@ test('отчёт печатает оба потока, фильтры и ито�
         await report.waitForLoadState();
         await expect(report).toHaveURL(/\/print\/actions\?/);
         await expect(report.locator('#operation-count')).toHaveText('2');
+        await expect(report.locator('#report-author')).toHaveText(me.login);
         await expect(report.locator('[data-operation-id]')).toHaveCount(2);
         await expect(report.locator('.operations')).toContainText(memo);
         await expect(report.locator('.totals')).toContainText('123,45');

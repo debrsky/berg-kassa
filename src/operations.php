@@ -110,6 +110,7 @@ function writeAction(array $user, ?int $id = null): never
     $values['is_black'] = $values['is_black'] ? 'true' : 'false';
     $pdo->beginTransaction();
     if ($id === null) {
+        requireOperationDateAccess($user, [$values['action_date']]);
         $sql = 'INSERT INTO actions (account_id, currency_id, suboperation_id, action_date, amount, '
             . 'exchange_rate, is_debit, memo, is_black) VALUES (:account_id, :currency_id, :suboperation_id, '
             . ':action_date, :amount, :exchange_rate, :is_debit, :memo, :is_black) RETURNING id';
@@ -126,6 +127,7 @@ function writeAction(array $user, ?int $id = null): never
             auditEvent('access.denied', $user, 'actions', $id, ['reason' => 'protected_operation']);
             jsonResponse(['error' => 'Protected operation access denied'], 403);
         }
+        requireOperationDateAccess($user, [$action['action_date'], $values['action_date']], $id);
         $sql = 'UPDATE actions SET account_id = :account_id, currency_id = :currency_id, '
             . 'suboperation_id = :suboperation_id, action_date = :action_date, amount = :amount, '
             . 'exchange_rate = :exchange_rate, is_debit = :is_debit, memo = :memo, is_black = :is_black '
@@ -173,6 +175,7 @@ function deleteAction(array $user, int $id): never
         auditEvent('access.denied', $user, 'actions', $id, ['reason' => 'not_found_or_protected']);
         jsonResponse(['error' => 'Operation not found or access denied'], 404);
     }
+    requireOperationDateAccess($user, [$old['action_date']], $id);
     try {
         $statement = $pdo->prepare('DELETE FROM actions WHERE id = :id');
         $statement->execute(['id' => $id]);

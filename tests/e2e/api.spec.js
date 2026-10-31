@@ -14,6 +14,70 @@ test.beforeEach(async ({ request }) => {
     csrf = (await (await request.get('/api/me')).json()).csrf_token;
 });
 
+test('период изменения: старые даты закрыты, отметки и будущие даты доступны', async ({ request, withActionFixture, playwright, baseURL }) => {
+    const admin = await (await request.get('/api/me')).json();
+    test.skip(!admin.can_view_protected, 'Нужен администратор');
+    const settings = await (await request.get('/api/operation-settings')).json();
+    expect(settings.edit_days).toBeGreaterThanOrEqual(1);
+    expect(settings.server_timezone).toBeTruthy();
+    expect((await request.put('/api/operation-settings', { data: { edit_days: 2 } })).status()).toBe(403);
+    for (const edit_days of [0, -1, 1.5, '2', null, 2147483648]) {
+        expect((await request.put('/api/operation-settings', {
+            headers: { 'X-CSRF-Token': csrf }, data: { edit_days },
+        })).status()).toBe(400);
+    }
+    const userLogin = `E2E-period-${Date.now()}`;
+    const userPassword = `E2E-${Date.now()}-password`;
+    let userId;
+    const restricted = await playwright.request.newContext({ baseURL });
+    try {
+        const created = await request.post('/api/users', {
+            headers: { 'X-CSRF-Token': csrf },
+            data: { login: userLogin, password: userPassword, data_schemas: [admin.data_schema] },
+        });
+        expect(created.status()).toBe(201);
+        userId = (await created.json()).id;
+        expect((await restricted.post('/api/login', { data: { login: userLogin, password: userPassword } })).ok()).toBeTruthy();
+        const me = await (await restricted.get('/api/me')).json();
+        const headers = { 'X-CSRF-Token': me.csrf_token };
+        expect((await restricted.get('/api/operation-settings')).status()).toBe(403);
+        expect((await restricted.put('/api/operation-settings', { headers, data: { edit_days: 10 } })).status()).toBe(403);
+        await withActionFixture(request, async ({ id, action }) => {
+            const from = me.operation_edit_from;
+            const previous = new Date(from + 'T00:00:00Z');
+            previous.setUTCDate(previous.getUTCDate() - 1);
+            const old = { ...action, action_date: previous.toISOString().slice(0, 10) + 'T23:59' };
+            expect((await request.put(`/api/actions/${id}`, { headers: { 'X-CSRF-Token': csrf }, data: old })).ok()).toBeTruthy();
+            const boundary = { ...action, action_date: from + 'T00:00' };
+            for (const response of [
+                await restricted.post('/api/actions', { headers, data: old }),
+                await restricted.post('/api/actions', { headers, data: { ...old, posting: { account_id: action.account_id, suboperation_id: action.suboperation_id } } }),
+                await restricted.put(`/api/actions/${id}`, { headers, data: boundary }),
+                await restricted.delete(`/api/actions/${id}`, { headers }),
+            ]) {
+                expect(response.status()).toBe(403);
+                expect((await response.json()).code).toBe('OPERATION_DATE_LOCKED');
+            }
+            expect((await restricted.patch(`/api/actions/${id}/check`, { headers, data: { checked: true } })).ok()).toBeTruthy();
+            expect((await request.put(`/api/actions/${id}`, { headers: { 'X-CSRF-Token': csrf }, data: boundary })).ok()).toBeTruthy();
+            expect((await restricted.put(`/api/actions/${id}`, { headers, data: old })).status()).toBe(403);
+            expect((await restricted.put(`/api/actions/${id}`, { headers, data: boundary })).ok()).toBeTruthy();
+            expect((await restricted.put(`/api/actions/${id}`, { headers, data: { ...boundary, action_date: '2099-01-01T00:00' } })).ok()).toBeTruthy();
+            const future = await restricted.post('/api/actions', { headers, data: { ...boundary, action_date: '2099-01-01T00:00' } });
+            expect(future.status()).toBe(201);
+            const futureId = (await future.json()).id;
+            try {
+                expect((await restricted.delete(`/api/actions/${futureId}`, { headers })).ok()).toBeTruthy();
+            } finally {
+                await request.delete(`/api/actions/${futureId}`, { headers: { 'X-CSRF-Token': csrf } });
+            }
+        });
+    } finally {
+        await restricted.dispose();
+        if (userId) expect((await request.delete(`/api/users/${userId}`, { headers: { 'X-CSRF-Token': csrf } })).ok()).toBeTruthy();
+    }
+});
+
 test('справочники имеют ожидаемую структуру', async ({ request }) => {
     const response = await request.get('/api/lookups');
     expect(response.ok()).toBeTruthy();

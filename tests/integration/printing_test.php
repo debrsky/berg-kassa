@@ -26,7 +26,7 @@ $check = function (bool $condition, string $message) use (&$passed): void {
     if (!$condition) throw new RuntimeException($message);
     $passed++;
 };
-$user = ['can_view_protected' => false, 'data_schema' => 'test'];
+$user = ['can_view_protected' => false, 'data_schema' => 'test', 'login' => '<script>report-user</script>'];
 $render = function (array $report) use ($user): string {
     $schemaMismatch = false;
     $confirmation = ['confirmed' => '1', 'schema' => 'test'];
@@ -47,6 +47,7 @@ $check($report['summary']['currencies'][0]['income'] === '10010.00', 'Exact inco
 $check($report['summary']['currencies'][0]['expense'] === '10010.00', 'Exact expense total');
 $html = $render($report);
 $check(substr_count($html, 'data-operation-id') === 2000, 'Template renders full selection');
+$check(str_contains($html, 'Сформировал: <span id="report-author">&lt;script&gt;report-user&lt;/script&gt;</span>'), 'Report displays and escapes authenticated login');
 $check(!str_contains($html, ' style='), 'Report does not emit inline styles blocked by hosting CSP');
 $check(substr_count($html, 'amount-column amount-column--8') === 2, 'Both money columns use the matching external width class');
 $check(str_contains($html, '&lt;script&gt;тест&lt;/script&gt;') && !str_contains($html, '<script>тест'), 'Template escapes operation memo');

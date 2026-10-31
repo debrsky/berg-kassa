@@ -338,6 +338,7 @@ function newOperationDateTime() {
 
 function openOperation(item = null, isDebit = true) {
     operationForm.reset();
+    for (const control of operationForm.querySelectorAll('input, select, textarea')) control.disabled = false;
     operationForm.querySelector('[name="id"]').value = item?.id || '';
     operationForm.elements.action_date.value = item?.action_date
         ? String(item.action_date).replace(' ', 'T').slice(0, 16)
@@ -389,6 +390,16 @@ function openOperation(item = null, isDebit = true) {
     document.querySelector('#operation-form-title').textContent = item ? 'Редактирование операции' : 'Новая операция';
     document.querySelector('#delete-operation').hidden = !item;
     document.querySelector('#operation-form-error').textContent = '';
+    const from = currentUser.operation_edit_from;
+    const locked = Boolean(item && from && String(item.action_date).slice(0, 10) < from);
+    operationForm.elements.action_date.min = from ? from + 'T00:00' : '';
+    operationForm.querySelector('[type="submit"]').disabled = locked;
+    document.querySelector('#delete-operation').disabled = locked;
+    if (locked) {
+        for (const control of operationForm.querySelectorAll('input, select, textarea')) control.disabled = true;
+        document.querySelector('#operation-form-title').textContent = 'Просмотр операции';
+        document.querySelector('#operation-form-error').textContent = 'Изменения операций доступны с ' + from.split('-').reverse().join('.') + '.';
+    }
     operationDialog.showModal();
 }
 

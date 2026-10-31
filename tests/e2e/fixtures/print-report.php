@@ -6,7 +6,7 @@ require dirname(__DIR__, 3) . '/src/app.php';
 require dirname(__DIR__, 3) . '/src/printing.php';
 
 // Synthetic layout fixture; no environment, session, credentials or database needed.
-$user = ['data_schema' => 'test'];
+$user = ['data_schema' => 'test', 'login' => 'print-test-user'];
 $schemaMismatch = false;
 $confirmation = [];
 $item = [

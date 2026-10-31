@@ -51,6 +51,38 @@
     padding: var(--space-4);
 }
 
+.operation-settings {
+    display: grid;
+    justify-self: start;
+    width: min(100%, 42rem);
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+}
+
+.operation-settings__controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--space-3);
+}
+
+.operation-settings .reference-manager__field input {
+    width: 7rem;
+}
+
+.operation-settings p {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.operation-settings p:empty {
+    display: none;
+}
+
 .users-manager {
     display: grid;
     grid-template-columns: minmax(32rem, 2fr) minmax(18rem, 1fr);

@@ -52,6 +52,9 @@ try {
         if ($path === '/api/audit-log') {
             auditLog($user);
         }
+        if ($path === '/api/operation-settings') {
+            operationSettings($user);
+        }
         if ($path === '/api/users') {
             users($user);
         }
@@ -198,6 +201,15 @@ try {
             <p class="dashboard__status" id="status" role="status">Загрузка…</p>
         </div>
     </header>
+    <form class="operation-settings" id="operation-settings-form">
+        <div class="operation-settings__controls">
+            <label class="reference-manager__field"><span>Доступный период изменения операций, дней</span><input type="number" name="edit_days" min="1" max="2147483647" step="1" value="2" required></label>
+            <button class="reference-manager__save" type="submit" disabled>Сохранить период</button>
+        </div>
+        <p>Общий для всех обычных пользователей и схем. Включает сегодня; будущие даты и отметки пользователя не ограничены. Администраторы работают без ограничения.</p>
+        <p id="operation-settings-timezone"></p>
+        <p id="operation-settings-message" role="status"></p>
+    </form>
     <section class="users-manager">
         <div class="audit-log__scroll">
             <table><thead><tr><th>Логин</th><th>Схемы</th><th>Администратор</th><th>Активен</th><th></th></tr></thead><tbody id="user-rows"></tbody></table>

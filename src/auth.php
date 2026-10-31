@@ -6,6 +6,11 @@ function initAuth(PDO $pdo): void
 {
     $pdo->exec(<<<'SQL'
         CREATE SCHEMA IF NOT EXISTS auth;
+        CREATE TABLE IF NOT EXISTS auth.operation_settings (
+            id integer PRIMARY KEY CHECK (id = 1),
+            edit_days integer NOT NULL DEFAULT 2 CHECK (edit_days >= 1)
+        );
+        INSERT INTO auth.operation_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
         CREATE TABLE IF NOT EXISTS auth.users (
             id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             login text NOT NULL,
@@ -320,6 +325,8 @@ function me(array $user): never
         'unavailable_data_schemas' => $unavailable,
         'can_view_protected' => $user['can_view_protected'],
         'csrf_token' => csrfToken(),
+        'operation_edit_from' => $user['can_view_protected'] ? null : operationEditFrom(operationEditDays()),
+        'server_timezone' => date_default_timezone_get(),
     ]);
 }
 

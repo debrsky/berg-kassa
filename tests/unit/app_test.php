@@ -14,6 +14,55 @@ function check(bool $condition, string $message): void
     $passed++;
 }
 
+$originalTimezone = date_default_timezone_get();
+$originalAppTimezone = getenv('APP_TIMEZONE');
+try {
+    date_default_timezone_set('UTC');
+    putenv('APP_TIMEZONE');
+    configureAppTimezone();
+    check(date_default_timezone_get() === 'UTC', 'Unset APP_TIMEZONE preserves PHP timezone');
+    putenv('APP_TIMEZONE=');
+    configureAppTimezone();
+    check(date_default_timezone_get() === 'UTC', 'Empty APP_TIMEZONE preserves PHP timezone');
+    putenv('APP_TIMEZONE=Asia/Vladivostok');
+    configureAppTimezone();
+    check(date_default_timezone_get() === 'Asia/Vladivostok', 'APP_TIMEZONE sets application timezone');
+    $instant = new DateTimeImmutable('2026-02-28T15:00:00Z');
+    $local = $instant->setTimezone(new DateTimeZone(date_default_timezone_get()));
+    check(operationEditFrom(2, $local) === '2026-02-28', 'Calendar boundary uses application timezone');
+    putenv('APP_TIMEZONE=UTC');
+    configureAppTimezone();
+    $local = $instant->setTimezone(new DateTimeZone(date_default_timezone_get()));
+    check(operationEditFrom(2, $local) === '2026-02-27', 'Same instant has different calendar boundary in UTC');
+    putenv('APP_TIMEZONE=Invalid/Timezone');
+    try {
+        configureAppTimezone();
+        check(false, 'Invalid application timezone rejected');
+    } catch (RuntimeException $error) {
+        check(str_contains($error->getMessage(), 'APP_TIMEZONE'), 'Invalid application timezone has clear error');
+    }
+    check(date_default_timezone_get() === 'UTC', 'Invalid timezone does not change active timezone');
+} finally {
+    date_default_timezone_set($originalTimezone);
+    putenv($originalAppTimezone === false ? 'APP_TIMEZONE' : 'APP_TIMEZONE=' . $originalAppTimezone);
+}
+
+$now = new DateTimeImmutable('2026-03-01 00:01:00', new DateTimeZone('Asia/Vladivostok'));
+check(operationEditFrom(2, $now) === '2026-02-28', 'Two days include today and yesterday across month boundary');
+check(operationEditFrom(1, $now) === '2026-03-01', 'One day starts today');
+check(operationEditFrom(2147483647, $now) === '0001-01-01', 'Large periods keep a valid minimum date');
+check(operationEditFrom(2, new DateTimeImmutable('2024-03-01 00:00:00')) === '2024-02-29', 'Leap day is a calendar day');
+check(operationEditFrom(2, new DateTimeImmutable('2026-01-01 23:59:00')) === '2025-12-31', 'Calendar days cross year boundary');
+check(operationDateAllowed('2026-02-28 00:00:00', '2026-02-28'), 'Boundary midnight is allowed');
+check(!operationDateAllowed('2026-02-27 23:59:59', '2026-02-28'), 'Previous day is locked');
+check(operationDateAllowed('2099-01-01 00:00:00', '2026-02-28'), 'Future dates are allowed');
+try {
+    operationEditFrom(0, $now);
+    check(false, 'Zero days rejected');
+} catch (InvalidArgumentException) {
+    check(true, 'Zero days rejected');
+}
+
 $_GET = ['id' => '42'];
 check(integerParameter('id') === 42, 'integerParameter accepts positive integers');
 $_GET = ['id' => '0'];

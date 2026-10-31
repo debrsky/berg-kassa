@@ -18,7 +18,8 @@
         <?= $report['filters']['to_date'] === 'infinity' ? 'без конечной даты' : printEscape($report['filters']['to_date']) ?>.
         Операций: <strong id="operation-count"><?= $report['count'] ?></strong>.</p>
     <p class="report-filters"><?= printEscape(implode('; ', $report['labels'])) ?>.
-        Сформировано: <?= printEscape(date('d.m.Y H:i:s T')) ?>.</p>
+        Сформировано: <?= printEscape(date('d.m.Y H:i:s T')) ?>.
+        Сформировал: <span id="report-author"><?= printEscape($user['login']) ?></span>.</p>
     <?php if ($report['state'] === 'blocked'): ?>
     <p role="alert">Найдено <?= $report['count'] ?> операций. Максимум для одного отчёта — <?= PRINT_MAX_COUNT ?>.
         Уменьшите период или уточните фильтры. Отчёт не сформирован.</p>

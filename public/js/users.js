@@ -98,11 +98,37 @@ form.addEventListener('submit', async event => {
 document.querySelector('#new-user').addEventListener('click', () => edit());
 bindLogout(() => csrf);
 
+document.querySelector('#operation-settings-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const settingsForm = event.currentTarget;
+    const button = settingsForm.querySelector('[type=submit]');
+    if (button.disabled) return;
+    button.disabled = true;
+    const message = document.querySelector('#operation-settings-message');
+    try {
+        await fetchJson('/api/operation-settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify({ edit_days: Number(settingsForm.elements.edit_days.value) }),
+        });
+        message.textContent = 'Период сохранён';
+    } catch (error) {
+        message.textContent = error.message;
+    } finally {
+        button.disabled = false;
+    }
+});
+
 (async () => {
     try {
         currentUser = await fetchJson('/api/me');
         csrf = currentUser.csrf_token;
         document.querySelector('#current-user').textContent = currentUser.login;
+        const settings = await fetchJson('/api/operation-settings');
+        const settingsForm = document.querySelector('#operation-settings-form');
+        settingsForm.elements.edit_days.value = settings.edit_days;
+        document.querySelector('#operation-settings-timezone').textContent = 'Часовой пояс сервера: ' + settings.server_timezone;
+        settingsForm.querySelector('[type=submit]').disabled = false;
         edit();
         await load();
     } catch (error) {
