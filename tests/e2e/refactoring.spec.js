@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { expandFilters } = require('./helpers');
 
 test.beforeEach(async ({ page }) => {
     test.skip(!process.env.E2E_USER || !process.env.E2E_PASSWORD, 'Нет тестового пользователя');
@@ -58,6 +59,7 @@ for (const kind of ['users', 'references']) {
 test('устаревшая ошибка итогов не заменяет новый статус', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#status')).toContainText('Найдено');
+    await expandFilters(page);
     let release;
     const gate = new Promise(resolve => release = resolve);
     let started = false;

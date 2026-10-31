@@ -495,11 +495,54 @@
 }
 
 .operations-toolbar {
-    display: flex;
+    display: none;
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
     gap: var(--space-3);
+}
+
+.dashboard__brand {
+    display: grid;
+    grid-template-columns: auto auto;
+    grid-template-areas: "eyebrow print" "title print";
+    align-items: center;
+    column-gap: var(--space-3);
+}
+
+.dashboard__brand .dashboard__eyebrow { grid-area: eyebrow; }
+.dashboard__brand .dashboard__title { grid-area: title; }
+.dashboard__brand .operations-print { grid-area: print; }
+
+.dashboard__session--operations {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.dashboard__session--operations .dashboard__status {
+    flex-basis: 100%;
+}
+
+.operations-print {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    gap: var(--space-1);
+    min-height: 36px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    background: var(--color-surface);
+    font: inherit;
+    cursor: pointer;
+}
+
+.operations-print:disabled {
+    opacity: 0.5;
+    cursor: wait;
 }
 
 .operation-form__save {
@@ -1270,6 +1313,10 @@
 }
 
 @media (max-width: 1099px) {
+    .operations-toolbar {
+        display: flex;
+    }
+
     .operations-tabs {
         display: flex;
         flex: 1;
@@ -1544,7 +1591,7 @@
 
     .operation-row {
         height: 128px;
-        grid-template: "date checks amount" 1.5rem "account checks amount" 1.35rem "operation operation operation" 1.45rem "suboperation suboperation suboperation" minmax(0, 1fr) / minmax(0, 1fr) auto auto;
+        grid-template: "date checks amount" 1.5rem "account checks amount" 1.35rem "operation operation operation" 1.45rem "suboperation suboperation suboperation" minmax(0, 1fr) / minmax(6.5rem, 1fr) auto minmax(0, 1fr);
         align-content: stretch;
         padding: var(--space-2) 0;
     }
@@ -1783,6 +1830,29 @@
         align-items: center;
         padding: var(--space-1) 0;
         background: var(--color-bg);
+    }
+
+    .dashboard > .dashboard__header {
+        grid-template-columns: 44px 36px minmax(0, 1fr) auto 36px;
+        grid-template-areas: "menu print title schema theme" "status status status status status";
+    }
+
+    .operations-print {
+        grid-area: print;
+        width: 36px;
+        padding: 0;
+    }
+
+    .operations-print__label {
+        display: none;
+    }
+
+    .dashboard__brand {
+        display: contents;
+    }
+
+    .dashboard__brand .dashboard__eyebrow {
+        display: none;
     }
 
     .dashboard__header > div:first-child {

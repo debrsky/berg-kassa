@@ -1,4 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { expect } = require('@playwright/test');
+const { test } = require('./helpers');
 
 const login = process.env.E2E_USER;
 const password = process.env.E2E_PASSWORD;
@@ -156,12 +157,14 @@ test('ошибка проводки не сохраняет основную о�
     expect((await (await request.get(summaryUrl)).json()).operation_count).toBe(before);
 });
 
-test('явная проверка блокирует удаление используемого счёта', async ({ request }) => {
-    const actions = await (await request.get('/api/actions?flow=income&limit=1')).json();
-    test.skip(!actions.items.length, 'Нет операций для проверки зависимости');
-    const response = await request.delete(`/api/references/accounts/${actions.items[0].account_id}`, { headers: { 'X-CSRF-Token': csrf } });
-    expect(response.status()).toBe(409);
-    expect((await response.json()).error).toContain('используется');
+test('явная проверка блокирует удаление используемого счёта', async ({ request, withActionFixture }) => {
+    await withActionFixture(request, async ({ accountId, headers, id, query }) => {
+        const response = await request.delete(`/api/references/accounts/${accountId}`, { headers });
+        expect(response.status()).toBe(409);
+        expect((await response.json()).error).toContain('используется');
+        const actions = await (await request.get(`/api/actions?${query}&flow=income`)).json();
+        expect(actions.items.map(item => item.id)).toEqual([id]);
+    });
 });
 
 test('критические чтения укладываются в две секунды и работают параллельно', async ({ request }) => {

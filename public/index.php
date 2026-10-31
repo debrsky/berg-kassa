@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';
+require_once dirname(__DIR__) . '/src/printing.php';
 
 // X-Robots-Tag is set globally in .htaccess.
 
@@ -15,6 +16,14 @@ $isUsersPage = $path === '/users';
 try {
     if ($path === '/api/login') {
         login();
+    }
+    if ($path === '/print/actions') {
+        $printUser = currentUser();
+        if (!$printUser) {
+            header('Location: /login');
+            exit;
+        }
+        printReportPage($printUser);
     }
     if ($isLoginPage) {
         if (currentUser()) {
@@ -301,11 +310,15 @@ try {
 <?php else: ?>
 <main class="dashboard">
     <header class="dashboard__header">
-        <div>
+        <div class="dashboard__brand">
             <p class="dashboard__eyebrow">Финансовый журнал</p>
             <h1 class="dashboard__title"><span class="dashboard__mobile-brand" aria-hidden="true">Берг </span>Касса</h1>
+            <button class="operations-print" type="button" id="print-actions" aria-label="Печать" title="Печать операций" disabled>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><path d="M7 8V3h10v5M7 17H4V8h16v9h-3"/><path d="M7 14h10v7H7zM16 11h2"/></svg>
+                <span class="operations-print__label">Печать</span>
+            </button>
         </div>
-        <div class="dashboard__session">
+        <div class="dashboard__session dashboard__session--operations">
             <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему"></button>
             <span class="dashboard__user" id="current-user"></span>
             <label class="dashboard__schema-label">

@@ -92,4 +92,23 @@ check($attempts === [950, 1000], 'login rate limit expires old attempts');
 saveLoginAttempts($handle, []);
 unlink(loginAttemptFile($ip));
 
+require dirname(__DIR__, 2) . '/src/printing.php';
+foreach ([0, 500, 501, 2000, 2001] as $count) {
+    check(printVolumeState($count, false) === ($count > 2000 ? 'blocked' : ($count > 500 ? 'confirm' : 'ready')), 'Print volume boundaries');
+    check(printVolumeState($count, true) === ($count > 2000 ? 'blocked' : 'ready'), 'Confirmation cannot bypass limit');
+}
+check(printMoney('99999999999999999.99') === '99 999 999 999 999 999,99', 'Print amount preserves precision');
+check(printMoney('-1234.00') === '-1 234,00', 'Negative balance formatting');
+check(printMoney(null) === '—', 'Missing amount formatting');
+check(printAmountCharacters([]) === 8, 'Empty report keeps readable amount columns');
+check(printAmountCharacters([['amount' => null], ['amount' => '99999999999999999.99']]) === 25, 'Amount columns accommodate the full largest amount');
+check(printEscape('<script>"&') === '&lt;script&gt;&quot;&amp;', 'Print text is escaped');
+check(printClassificationMarkers([]) === [], 'No classification references without filters');
+check(printClassificationMarkers(['direction_id' => 7, 'action_type_id' => null, 'suboperation_l1_id' => 3]) === ['direction' => '①', 'suboperation_l1' => '③'], 'Only explicitly selected levels receive stable symbols');
+check(printClassificationMarkers(['suboperation_l2_id' => 9]) === ['suboperation_l2' => '④'], 'Selecting a child alone does not hide its ancestors');
+$_GET = ['income_checked_user' => '0', 'expense_checked_superuser' => '1'];
+$params = [];
+$sql = flowCheckSql($params);
+check(str_contains($sql, ' OR ') && $params === ['income_checked_user' => 'false', 'expense_checked_superuser' => 'true'], 'Combined report preserves per-flow checks');
+
 echo "Unit: {$passed} passed\n";

@@ -560,10 +560,18 @@ function updateFilterToggle() {
     filterToggle.textContent = `${expanded ? 'Скрыть фильтры' : 'Фильтры'}${active ? ` (${active})` : ''} ${expanded ? '▴' : '▾'}`;
 }
 
+document.querySelector('#print-actions').addEventListener('click', () => {
+    if (!currentUser || document.querySelector('#filter-fields').disabled) return;
+    const params = new URLSearchParams(appliedFilters);
+    params.set('schema', currentUser.data_schema);
+    window.open(`/print/actions?${params}`, '_blank', 'noopener,noreferrer');
+});
+
 bindLogout(() => currentUser.csrf_token);
 
 document.querySelector('#data-schema').addEventListener('change', async event => {
     event.target.disabled = true;
+    document.querySelector('#print-actions').disabled = true;
     document.querySelector('#filter-fields').disabled = true;
     for (const button of document.querySelectorAll('[data-add-flow]')) button.disabled = true;
     try {
@@ -579,6 +587,7 @@ document.querySelector('#data-schema').addEventListener('change', async event =>
         fillSelect('account_id');
         fillSelect('currency_id');
         document.querySelector('#filter-fields').disabled = false;
+        document.querySelector('#print-actions').disabled = false;
         for (const button of document.querySelectorAll('[data-add-flow]')) button.disabled = false;
         refresh();
     } catch (error) {
@@ -619,6 +628,7 @@ async function init() {
         fillSelect('currency_id');
         refreshCascade();
         document.querySelector('#filter-fields').disabled = false;
+        document.querySelector('#print-actions').disabled = false;
         for (const button of document.querySelectorAll('[data-add-flow]')) button.disabled = false;
         refresh();
     } catch (error) {

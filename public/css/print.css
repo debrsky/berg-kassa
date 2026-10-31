@@ -1,0 +1,41 @@
+:root { color-scheme: light; font-family: Arial, sans-serif; color: #111; background: #fff; }
+body { margin: 16px; }
+main { max-width: 1000px; margin: auto; }
+h1 { margin: 0 0 4px; font-size: 20px; }
+h1 small { font-size: 0.7em; font-weight: normal; }
+h2 { margin: 10px 0 4px; font-size: 16px; }
+p { margin: 4px 0; overflow-wrap: anywhere; }
+button, a { min-height: 36px; font: inherit; }
+button { padding: 8px 16px; cursor: pointer; }
+a { display: inline-block; }
+:focus-visible { outline: 3px solid #1659a5; outline-offset: 3px; }
+.print-controls { margin: 12px 0; }
+.report-filters, .report-legend, .report-footnote, .operation-meta { font-size: 10px; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; min-width: 700px; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+caption { text-align: left; margin-bottom: 4px; font-size: 10px; }
+th, td { border: 0; border-bottom: 0.5px solid #aaa; padding: 3px 4px; vertical-align: top; overflow-wrap: anywhere; }
+th { text-align: left; }
+thead { display: table-header-group; }
+thead th { border-top: 0.5px solid #777; border-bottom: 0.5px solid #777; }
+.date-column { width: 28mm; }
+.account-column { width: 24mm; }
+.check-column { width: 8mm; }
+.operation-check { text-align: center; white-space: nowrap; overflow-wrap: normal; }
+.money { text-align: right; font-variant-numeric: tabular-nums; }
+.operations .money, .operation-date { white-space: nowrap; overflow-wrap: normal; }
+.memo { white-space: pre-wrap; }
+@page { size: A4 portrait; margin: 12mm; }
+@media print {
+    body { margin: 0; font-size: 8pt; }
+    main { max-width: none; }
+    h1 { font-size: 12pt; margin-bottom: 1mm; }
+    h2 { font-size: 10pt; margin: 2mm 0 1mm; break-after: avoid; }
+    p { margin: 1mm 0; }
+    .report-filters, .report-legend, .report-footnote, .operation-meta, caption { font-size: 7pt; }
+    .print-controls { display: none; }
+    .table-scroll { overflow: visible; }
+    table { min-width: 0; font-size: 8pt; }
+    th, td { padding: 0.8mm 1mm; }
+    tr { break-inside: avoid; }
+}

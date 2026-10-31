@@ -266,26 +266,15 @@ function actions(array $user): never
 
 function summary(array $user): never
 {
-    $filters = filters(true, $user['can_view_protected']);
+    jsonResponse(actionSummaryData($user));
+}
+
+function actionSummaryData(array $user, ?array $selectedFilters = null): array
+{
+    $filters = $selectedFilters ?? filters(true, $user['can_view_protected']);
     $params = ['from_date' => $filters['from_date'], 'to_date' => $filters['to_date']];
     $where = filterSql($filters, $params, false);
-    $flowChecks = [];
-    foreach (['income' => 'a.is_debit', 'expense' => 'NOT a.is_debit'] as $flow => $direction) {
-        $checks = [$direction];
-        foreach (['checked_user' => 'is_checked_user', 'checked_superuser' => 'is_checked_superuser'] as $name => $column) {
-            $value = booleanParameter("{$flow}_{$name}");
-            if ($value !== null) {
-                $parameter = "{$flow}_{$name}";
-                $checks[] = "a.{$column} = :{$parameter}";
-                $params[$parameter] = $value ? 'true' : 'false';
-            }
-        }
-        $flowChecks[$flow] = $checks;
-    }
-    if (count($flowChecks['income']) > 1 || count($flowChecks['expense']) > 1) {
-        $where .= ' AND ((' . implode(' AND ', $flowChecks['income']) . ') OR ('
-            . implode(' AND ', $flowChecks['expense']) . '))';
-    }
+    $where .= flowCheckSql($params);
     $base = ' FROM actions a ' . joins() . ' WHERE a.action_date < (:to_date::date + INTERVAL \'1 day\')' . $where;
     $measures = <<<'SQL'
         COALESCE(SUM(CASE WHEN a.action_date < :from_date THEN
@@ -301,8 +290,30 @@ function summary(array $user): never
     $statement->execute($params);
     $currencies = $statement->fetchAll();
 
-    jsonResponse([
+    return [
         'currencies' => $currencies,
         'operation_count' => array_sum(array_column($currencies, 'operation_count')),
-    ]);
+    ];
+}
+
+function flowCheckSql(array &$params): string
+{
+    $flowChecks = [];
+    foreach (['income' => 'a.is_debit', 'expense' => 'NOT a.is_debit'] as $flow => $direction) {
+        $checks = [$direction];
+        foreach (['checked_user' => 'is_checked_user', 'checked_superuser' => 'is_checked_superuser'] as $name => $column) {
+            $value = booleanParameter("{$flow}_{$name}");
+            if ($value !== null) {
+                $parameter = "{$flow}_{$name}";
+                $checks[] = "a.{$column} = :{$parameter}";
+                $params[$parameter] = $value ? 'true' : 'false';
+            }
+        }
+        $flowChecks[$flow] = $checks;
+    }
+    if (count($flowChecks['income']) > 1 || count($flowChecks['expense']) > 1) {
+        return ' AND ((' . implode(' AND ', $flowChecks['income']) . ') OR ('
+            . implode(' AND ', $flowChecks['expense']) . '))';
+    }
+    return '';
 }

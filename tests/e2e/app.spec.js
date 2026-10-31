@@ -1,14 +1,10 @@
-const { test, expect } = require('@playwright/test');
+const { expect } = require('@playwright/test');
+const { test, expandFilters } = require('./helpers');
 
 const login = process.env.E2E_USER;
 const password = process.env.E2E_PASSWORD;
 const restrictedLogin = process.env.E2E_RESTRICTED_USER;
 const restrictedPassword = process.env.E2E_RESTRICTED_PASSWORD;
-
-async function expandFilters(page) {
-    const toggle = page.locator('#filter-toggle');
-    if (await toggle.isVisible() && await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
-}
 
 test('неавторизованного пользователя перенаправляет на вход', async ({ page }) => {
     await page.goto('/');
@@ -178,7 +174,9 @@ test('основная страница и форма добавления ра�
     await expect(page.getByRole('heading', { name: 'Касса' })).toBeVisible();
     await expandFilters(page);
     await expect(page.getByLabel('Начало периода')).toBeVisible();
-    await expect(page.locator('#currency-summary table')).toBeVisible();
+    const mobile = (page.viewportSize()?.width ?? 1280) < 480;
+    await expect(page.locator('#currency-summary table')).toBeVisible({ visible: !mobile });
+    await expect(page.locator('#currency-summary .summary-compact')).toBeVisible({ visible: mobile });
     await expect(page.getByRole('region', { name: 'Итоги и сальдо' })).toBeVisible();
     await expect(page.locator('.summary__header, #summary-count')).toHaveCount(0);
     await expect(page.locator('#direction-summary, .summary__details')).toHaveCount(0);
@@ -209,12 +207,14 @@ test('фильтры отметок в заголовках независимы
 });
 
 test('поиск по примечанию применяется и сохраняется', async ({ page }) => {
+    await expandFilters(page);
     const memo = page.locator('#filters [name="memo"]');
     await memo.fill('аренда');
     await expect.poll(() => new URL(page.url()).searchParams.get('memo')).toBe('аренда');
     await page.reload();
     await expect(memo).toHaveValue('аренда');
     await expect(page.locator('#status')).toContainText('Найдено');
+    await expandFilters(page);
     await memo.fill('50%_!');
     await memo.press('Enter');
     await expect.poll(() => new URL(page.url()).searchParams.get('memo')).toBe('50%_!');
@@ -277,7 +277,10 @@ test('готовые периоды и проверка дат работают'
     await page.reload();
     await expect(preset).toHaveValue('all');
     await expect(from).toHaveValue('');
+    await expandFilters(page);
     await page.locator('#reset-filters').click();
+    await expect(preset).toHaveValue('');
+    await expect(page).not.toHaveURL(/from_date=&to_date=/);
 });
 
 test('меню закрывается и позволяет перейти в справочники и выйти', async ({ page }) => {
@@ -370,15 +373,29 @@ test('форма операции помещается по высоте на э
     }
 });
 
-test('дата открывает редактор существующей операции', async ({ page }) => {
-    const dateButton = page.getByRole('button', { name: /Редактировать операцию от/ }).first();
-    await expect(dateButton).toBeVisible();
-    await dateButton.click();
-    await expect(page.locator('#operation-dialog')).toBeVisible();
-    await expect(page.locator('#delete-operation')).toBeVisible();
-    if ((page.viewportSize()?.width ?? 0) >= 1000) {
-        expect(await page.locator('#operation-dialog').evaluate(element => element.scrollHeight <= element.clientHeight)).toBe(true);
-    }
+test('дата открывает редактор существующей операции', async ({ page, withActionFixture }) => {
+    await withActionFixture(page.request, async ({ id, action, query }) => {
+        await page.goto(`/?${query}`);
+        await expect(page.locator('#status')).toHaveText('Найдено 1 операций');
+        if (await page.locator('.operations-tabs').isVisible()) await page.locator('[data-flow-tab="income"]').click();
+        if ((page.viewportSize()?.width ?? 1280) < 480) await page.setViewportSize({ width: 320, height: 700 });
+        const dateButton = page.locator('#income-panel').getByRole('button', { name: /Редактировать операцию от/ });
+        await expect(dateButton).toHaveCount(1);
+        const unobstructed = await dateButton.evaluate(button => {
+            const rect = button.getBoundingClientRect();
+            return button.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+        });
+        expect(unobstructed, 'Длинная валюта и отметки не должны перекрывать кнопку даты').toBe(true);
+        await dateButton.click();
+        await expect(page.locator('#operation-dialog')).toBeVisible();
+        await expect(page.locator('#delete-operation')).toBeVisible();
+        await expect(page.locator('#operation-form [name=id]')).toHaveValue(String(id));
+        await expect(page.locator('#operation-form [name=memo]')).toHaveValue(action.memo);
+        await expect(page.locator('#operation-form [name=amount]')).toHaveValue(action.amount);
+        if ((page.viewportSize()?.width ?? 0) >= 1000) {
+            expect(await page.locator('#operation-dialog').evaluate(element => element.scrollHeight <= element.clientHeight)).toBe(true);
+        }
+    });
 });
 
 test('фильтр сохраняется в URL и восстанавливается после перезагрузки', async ({ page }) => {
@@ -393,7 +410,8 @@ test('фильтр сохраняется в URL и восстанавливае
     await page.getByRole('button', { name: 'Закрыть' }).click();
     await page.reload();
     await expect(page.locator('#filters [name="account_id"]')).toHaveValue(selected);
-    await page.getByRole('button', { name: 'Сбросить' }).click();
+    await expandFilters(page);
+    await page.getByRole('button', { name: 'Сбросить фильтры', exact: true }).click();
     await expect(page).not.toHaveURL(/account_id=/);
 });
 

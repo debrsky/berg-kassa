@@ -5,6 +5,9 @@ process.loadEnvFile();
 module.exports = defineConfig({
     testDir: './tests/e2e',
     timeout: 30_000,
+    // The local PHP development server handles one request at a time.
+    // CLI --workers (including test:load) still overrides this setting.
+    workers: process.env.E2E_BASE_URL ? undefined : 1,
     reporter: [['list'], ['html', { open: 'never' }]],
     use: {
         baseURL: process.env.E2E_BASE_URL || 'http://127.0.0.1:18090',
